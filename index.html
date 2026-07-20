@@ -907,25 +907,37 @@ async function logEvent(evento, detalle){
 }
 
 /* ================= tabs ================= */
-const PAGE_TITLES={captura:'Captura de Pólizas',polizas:'Pólizas registradas',asegurados:'Alta de asegurados',bitacora:'Bitácora de trabajo'};
+const TAB_IDS=['captura','asegurados','polizas','bitacora'];
+const PAGE_TITLES={
+  captura:'Captura de Pólizas',
+  asegurados:'Alta de asegurados',
+  polizas:'Pólizas registradas',
+  bitacora:'Bitácora de trabajo'
+};
+const tabButtons=[...document.querySelectorAll('.tab')];
+const tabPanels=Object.fromEntries(TAB_IDS.map(id=>[id,document.getElementById('tab-'+id)]));
+const pageTitle=document.getElementById('pageTitle');
 function showScreen(s){
   document.getElementById('screen-procesos').style.display = 'none';
   document.getElementById('screen-modulo').style.display  = '';
   document.getElementById('navProcesos').classList.remove('on');
   window.scrollTo(0,0);
 }
+function setActiveTab(tabId){
+  if(!TAB_IDS.includes(tabId)) return;
+  tabButtons.forEach(btn=>btn.classList.toggle('on',btn.dataset.t===tabId));
+  TAB_IDS.forEach(id=>{ if(tabPanels[id]) tabPanels[id].style.display = id===tabId ? '' : 'none'; });
+  pageTitle.textContent=PAGE_TITLES[tabId]||'Captura de Pólizas';
+}
+function goTab(name){ setActiveTab(name); }
 document.getElementById('modCaptura').onclick=()=>{ showScreen('modulo'); goTab('captura'); };
 document.getElementById('btnBack').style.display='none';
 document.getElementById('navProcesos').style.display='none';
 document.getElementById('navProcesos').onclick=()=>showScreen('modulo');
 document.querySelectorAll('.mod[data-ext]').forEach(m=>m.onclick=()=>toastMsg('Este módulo pertenece al portal de franquicias'));
 document.querySelectorAll('.nico:not(#navProcesos)').forEach(n=>n.onclick=()=>toastMsg('Esta sección pertenece al portal de franquicias'));
-document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
-  document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x===t));
-  ['captura','asegurados','polizas','bitacora'].forEach(id=>document.getElementById('tab-'+id).style.display = t.dataset.t===id?'':'none');
-  document.getElementById('pageTitle').textContent=PAGE_TITLES[t.dataset.t]||'Captura de Pólizas';
-});
-function goTab(name){ document.querySelector('.tab[data-t="'+name+'"]').click(); }
+tabButtons.forEach(btn=>btn.onclick=()=>setActiveTab(btn.dataset.t));
+setActiveTab('captura');
 
 /* ================= combobox ================= */
 function makeCombo(rootId, getOptions, onSelect, emptyMsg, actionCfg){
