@@ -7,6 +7,9 @@
 <meta name="theme-color" content="#101828">
 <link rel="icon" type="image/png" href="brand/click-imagotipo-color-medium.png?v=20260719">
 <link rel="apple-touch-icon" href="brand/click-imagotipo-color-medium.png?v=20260719">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
 <style>
@@ -17,7 +20,7 @@
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html{font-size:16px}
-body{font-family:'Lato','Nunito Sans','Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
+body{font-family:'Open Sans','Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--ink);min-height:100vh}
 
 
 
@@ -252,8 +255,8 @@ details.full-layout summary{font-size:.82rem;font-weight:800;color:var(--muted);
   <div class="headline"></div>
   <nav class="topnav">
     <button class="tab on" data-t="captura"><svg viewBox="0 0 24 24"><rect x="5" y="3.5" width="14" height="17" rx="2"/><path d="M9 8h6M9 12h6M9 16h3"/></svg><span>Captura</span></button>
-    <button class="tab" data-t="polizas"><svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg><span>Pólizas</span><span class="cnt" id="tabPolCount"></span></button>
     <button class="tab" data-t="asegurados"><svg viewBox="0 0 24 24"><circle cx="10" cy="8.5" r="3.5"/><path d="M4 19c.8-3 3.2-4.5 6-4.5s5.2 1.5 6 4.5"/><path d="M18.5 7v5M16 9.5h5"/></svg><span>Alta de asegurados</span></button>
+    <button class="tab" data-t="polizas"><svg viewBox="0 0 24 24"><path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/></svg><span>Pólizas</span><span class="cnt" id="tabPolCount"></span></button>
     <button class="tab" data-t="bitacora"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5V12l3 2"/></svg><span>Bitácora</span></button>
   </nav>
 
@@ -919,7 +922,7 @@ document.querySelectorAll('.mod[data-ext]').forEach(m=>m.onclick=()=>toastMsg('E
 document.querySelectorAll('.nico:not(#navProcesos)').forEach(n=>n.onclick=()=>toastMsg('Esta sección pertenece al portal de franquicias'));
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>{
   document.querySelectorAll('.tab').forEach(x=>x.classList.toggle('on',x===t));
-  ['captura','polizas','asegurados','bitacora'].forEach(id=>document.getElementById('tab-'+id).style.display = t.dataset.t===id?'':'none');
+  ['captura','asegurados','polizas','bitacora'].forEach(id=>document.getElementById('tab-'+id).style.display = t.dataset.t===id?'':'none');
   document.getElementById('pageTitle').textContent=PAGE_TITLES[t.dataset.t]||'Captura de Pólizas';
 });
 function goTab(name){ document.querySelector('.tab[data-t="'+name+'"]').click(); }
