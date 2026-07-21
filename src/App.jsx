@@ -142,7 +142,8 @@ function ComboField({
   disabled,
   actionLabel,
   onAction,
-  actionDisabled = false
+  actionDisabled = false,
+  hint
 }) {
   const [query, setQuery] = useState(value || '');
   const [open, setOpen] = useState(false);
@@ -214,14 +215,16 @@ function ComboField({
           </div>
         ) : null}
       </div>
+      {hint ? <small className="field-hint">{hint}</small> : null}
     </div>
   );
 }
 
-function Card({ title, subtitle, right, children, tone = 'neutral' }) {
+function Card({ title, subtitle, right, badge, children, tone = 'neutral' }) {
   return (
     <section className={`card tone-${tone}`}>
       <div className="card-head">
+        {badge ? <span className="section-badge">{badge}</span> : null}
         <div>
           <h3>{title}</h3>
           {subtitle ? <p>{subtitle}</p> : null}
@@ -231,6 +234,39 @@ function Card({ title, subtitle, right, children, tone = 'neutral' }) {
       {children}
     </section>
   );
+}
+
+function TabIcon({ tabId }) {
+  switch (tabId) {
+    case 'captura':
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <rect x="5" y="3.5" width="14" height="17" rx="2" />
+          <path d="M9 8h6M9 12h6M9 16h3" />
+        </svg>
+      );
+    case 'asegurados':
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="10" cy="8.5" r="3.5" />
+          <path d="M4 19c.8-3 3.2-4.5 6-4.5s5.2 1.5 6 4.5" />
+          <path d="M18.5 7v5M16 9.5h5" />
+        </svg>
+      );
+    case 'polizas':
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M4 7a2 2 0 0 1 2-2h4l2 2h6a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" />
+        </svg>
+      );
+    default:
+      return (
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="8.5" />
+          <path d="M12 7.5V12l3 2" />
+        </svg>
+      );
+  }
 }
 
 function SectionFields({ sections, fields, layout, onChange }) {
@@ -752,14 +788,12 @@ function App() {
   }
 
   const captureMatchClass = `status-chip ${matchResult.tone}`;
-  const captureValuesCount = countFilled(capture.layout);
-
   if (loading) {
     return (
       <div className="app-shell loading">
         <div className="hero-card">
           <span className="eyebrow">Click Seguros</span>
-          <h1>Portal de Captura de Pólizas</h1>
+          <h1>Captura de Pólizas</h1>
           <p>Cargando React + MySQL...</p>
         </div>
       </div>
@@ -771,7 +805,7 @@ function App() {
       <div className="app-shell loading">
         <div className="hero-card danger">
           <span className="eyebrow">Error de arranque</span>
-          <h1>No pude cargar el bootstrap</h1>
+          <h1>No pude cargar la captura</h1>
           <p>{error}</p>
         </div>
       </div>
@@ -781,24 +815,16 @@ function App() {
   return (
     <div className="app-shell">
       <header className="topbar">
-        <div>
-          <span className="eyebrow">Click Seguros · React + MySQL</span>
-          <h1>Portal de Captura de Pólizas</h1>
-          <p>
-            Flujo de captura comercial, altas, pólizas y bitácora, ahora separado en componentes y
-            persistido en MySQL.
-          </p>
+        <div className="topbar-main">
+          <h1>Captura de Pólizas</h1>
+          <button type="button" className="context-switch" aria-label="Seleccionar unidad">
+            <span>{capture.linea || 'C.F. Anzures'}</span>
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M7 10l5 5 5-5" />
+            </svg>
+          </button>
         </div>
-        <div className="topbar-meta">
-          <div className="meta-card">
-            <span>Estado</span>
-            <strong>{bootVersion}</strong>
-          </div>
-          <div className="meta-card">
-            <span>Registros</span>
-            <strong>{records.polizas.length} pólizas</strong>
-          </div>
-        </div>
+        <div className="topbar-status">{bootVersion || 'React + MySQL'}</div>
       </header>
 
       <nav className="tabs">
@@ -809,7 +835,8 @@ function App() {
             className={activeTab === tabId ? 'tab active' : 'tab'}
             onClick={() => setActiveTab(tabId)}
           >
-            {TAB_LABELS[tabId]}
+            <TabIcon tabId={tabId} />
+            <span>{TAB_LABELS[tabId]}</span>
           </button>
         ))}
       </nav>
@@ -819,16 +846,17 @@ function App() {
       {activeTab === 'captura' ? (
         <div className="page-grid">
           <Card
-            title="Captura comercial"
-            subtitle="Línea, gerencia, vendedor, asegurado y ramo"
-            right={<span className="pill">{captureValuesCount} campos capturados</span>}
+            badge="1"
+            title="Asignación comercial"
+            subtitle="Línea de negocio, gerencia, vendedor, asegurado y ramo"
           >
             <div className="combo-grid">
               <ComboField
-                label="Línea"
+                label="Línea de negocio"
                 value={capture.linea}
                 options={lineOptions}
                 placeholder="Selecciona la línea"
+                hint={`${lineOptions.length} opciones`}
                 onSelect={(value) =>
                   setCapture((current) => ({
                     ...current,
@@ -846,6 +874,7 @@ function App() {
                 value={capture.gerencia}
                 options={gerenciaOptions}
                 placeholder="Selecciona la gerencia"
+                hint={`${gerenciaOptions.length} opciones`}
                 disabled={!capture.linea}
                 onSelect={(value) =>
                   setCapture((current) => ({
@@ -861,6 +890,7 @@ function App() {
                 value={capture.vendedor}
                 options={vendedorOptions}
                 placeholder="Selecciona el vendedor"
+                hint={`${vendedorOptions.length} opciones`}
                 disabled={!capture.gerencia}
                 onSelect={(value) =>
                   setCapture((current) => ({
@@ -874,7 +904,8 @@ function App() {
                 label="Asegurado"
                 value={capture.asegurado}
                 options={aseguradoOptions}
-                placeholder="Selecciona el asegurado"
+                placeholder="Escribe para buscar al asegurado"
+                hint={`${aseguradoOptions.length} opciones`}
                 disabled={!capture.vendedor}
                 onSelect={(value) =>
                   setCapture((current) => ({
@@ -891,7 +922,8 @@ function App() {
                 label="Ramo"
                 value={capture.ramo}
                 options={ramoOptions}
-                placeholder="Selecciona el ramo"
+                placeholder="Primero elige al asegurado"
+                hint={`${ramoOptions.length} opciones`}
                 disabled={!capture.vendedor}
                 onSelect={(value) =>
                   setCapture((current) => ({
@@ -906,56 +938,57 @@ function App() {
                 value={capture.subramo}
                 options={subramoOptions}
                 placeholder={isVehiculos(capture.ramo) ? 'Vehículos no usa subramo' : 'Selecciona el subramo'}
+                hint={`${subramoOptions.length} opciones`}
                 disabled={!capture.ramo || isVehiculos(capture.ramo)}
                 onSelect={(value) => setCapture((current) => ({ ...current, subramo: value }))}
               />
             </div>
 
             <div className="capture-highlight">
-              <div className="status-line">
-                <span className="status-label">Asegurado asignado</span>
-                <strong>{capture.asegurado || 'Aún no se selecciona'}</strong>
-              </div>
               <div className={captureMatchClass}>{matchResult.message}</div>
             </div>
           </Card>
 
-          <Card title="Documentos" subtitle="Póliza, recibo y otros archivos">
+          <Card
+            badge="2"
+            title="Subir póliza"
+            subtitle="Carga la póliza principal, el recibo y otros documentos"
+          >
             <div className="file-grid">
               <label className="dropzone">
-                <span>Póliza</span>
+                <strong>Subir póliza</strong>
+                <small>PDF, JPG o PNG · 1 archivo</small>
                 <input
                   type="file"
                   accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
                   onChange={(event) => addFiles('poliza', event.target.files, 1)}
                 />
-                <small>Principal para la lectura asistida.</small>
               </label>
               <label className="dropzone">
-                <span>Recibo</span>
+                <strong>Subir recibo</strong>
+                <small>PDF, JPG o PNG · 1 archivo</small>
                 <input
                   type="file"
                   accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
                   onChange={(event) => addFiles('recibo', event.target.files, 1)}
                 />
-                <small>Un archivo máximo.</small>
               </label>
               <label className="dropzone">
-                <span>Otros</span>
+                <strong>Subir otros</strong>
+                <small>PDF, JPG o PNG · hasta 3 archivos</small>
                 <input
                   type="file"
                   accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
                   multiple
                   onChange={(event) => addFiles('otros', event.target.files, 3)}
                 />
-                <small>Hasta 3 archivos adicionales.</small>
               </label>
             </div>
 
             <AttachmentsList items={captureFiles} onRemove={removeFile} />
             <div className="actions-row">
               <button type="button" className="primary-button" onClick={readCaptureDocument} disabled={!polizaFiles.length}>
-                Lectura asistida
+                Leer póliza
               </button>
               <button type="button" className="secondary-button" onClick={savePoliza}>
                 Guardar póliza
@@ -1027,7 +1060,7 @@ function App() {
 
       {activeTab === 'asegurados' ? (
         <div className="page-grid two-col">
-          <Card title="Alta de asegurados" subtitle="Catalogo SQL de asegurados y grupos">
+          <Card title="Alta de asegurados" subtitle="Catálogo SQL de asegurados y grupos">
             <div className="type-switch">
               <button
                 type="button"
@@ -1297,7 +1330,7 @@ function App() {
 
       {activeTab === 'bitacora' ? (
         <div className="page-grid">
-            <Card title="Bitácora de trabajo" subtitle="Acciones guardadas en MySQL">
+          <Card title="Bitácora de trabajo" subtitle="Acciones guardadas en MySQL">
             {records.log.length ? (
               <div className="records-list">
                 {records.log.map((entry) => (

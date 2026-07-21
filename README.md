@@ -52,4 +52,4 @@ npm run build
 
 ## Estado
 
-La primera versión React + TypeScript + MySQL de la migración quedó publicada como `v0.0.9`.
+La versión React + TypeScript + MySQL con el rediseño principal quedó publicada como `v0.0.10`.
