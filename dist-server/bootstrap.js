@@ -206,6 +206,80 @@ async function loadLog() {
         detalle: String(row.detalle ?? '')
     }));
 }
+async function syncCatalogEntriesFromSeed(seed) {
+    const catalogs = (seed.catalogs ?? {});
+    await exec('DELETE FROM catalog_entries');
+    await exec('DELETE FROM catalog_schemas');
+    let sort = 0;
+    for (const name of catalogs.lineas ?? []) {
+        await exec('INSERT INTO catalog_entries (kind, name, parent_kind, parent_name, meta_json, sort_order) VALUES (:kind, :name, :parent_kind, :parent_name, :meta_json, :sort_order)', {
+            kind: 'linea',
+            name,
+            parent_kind: null,
+            parent_name: null,
+            meta_json: '{}',
+            sort_order: sort++
+        });
+    }
+    const mapBuckets = [
+        ['gerencia', catalogs.gerencias ?? {}],
+        ['vendedor', catalogs.vendedores ?? {}],
+        ['asegurado', catalogs.asegurados ?? {}],
+        ['subramo', catalogs.subramos ?? {}]
+    ];
+    for (const [kind, bucket] of mapBuckets) {
+        for (const [parent, values] of Object.entries(bucket)) {
+            for (const name of values) {
+                await exec('INSERT INTO catalog_entries (kind, name, parent_kind, parent_name, meta_json, sort_order) VALUES (:kind, :name, :parent_kind, :parent_name, :meta_json, :sort_order)', {
+                    kind,
+                    name,
+                    parent_kind: kind === 'gerencia' || kind === 'vendedor' || kind === 'asegurado' || kind === 'subramo' ? 'linea' : null,
+                    parent_name: parent,
+                    meta_json: '{}',
+                    sort_order: sort++
+                });
+            }
+        }
+    }
+    for (const name of catalogs.ramos ?? []) {
+        await exec('INSERT INTO catalog_entries (kind, name, parent_kind, parent_name, meta_json, sort_order) VALUES (:kind, :name, :parent_kind, :parent_name, :meta_json, :sort_order)', {
+            kind: 'ramo',
+            name,
+            parent_kind: null,
+            parent_name: null,
+            meta_json: '{}',
+            sort_order: sort++
+        });
+    }
+    if (catalogs.ramoSchemas) {
+        await exec('REPLACE INTO catalog_schemas (name, payload_json) VALUES (:name, :payload_json)', {
+            name: 'ramoSchemas',
+            payload_json: JSON.stringify(catalogs.ramoSchemas)
+        });
+    }
+    if (catalogs.danosEmpresarialesSchema) {
+        await exec('REPLACE INTO catalog_schemas (name, payload_json) VALUES (:name, :payload_json)', {
+            name: 'danosEmpresarialesSchema',
+            payload_json: JSON.stringify(catalogs.danosEmpresarialesSchema)
+        });
+    }
+}
+async function syncCatalogSchemasFromSeed(seed) {
+    const catalogs = (seed.catalogs ?? {});
+    await exec('DELETE FROM catalog_schemas');
+    if (catalogs.ramoSchemas) {
+        await exec('REPLACE INTO catalog_schemas (name, payload_json) VALUES (:name, :payload_json)', {
+            name: 'ramoSchemas',
+            payload_json: JSON.stringify(catalogs.ramoSchemas)
+        });
+    }
+    if (catalogs.danosEmpresarialesSchema) {
+        await exec('REPLACE INTO catalog_schemas (name, payload_json) VALUES (:name, :payload_json)', {
+            name: 'danosEmpresarialesSchema',
+            payload_json: JSON.stringify(catalogs.danosEmpresarialesSchema)
+        });
+    }
+}
 export async function buildBootstrapResponseFromDb() {
     const seed = await readSeed();
     const catalogs = {
@@ -375,6 +449,12 @@ async function seedFromBootstrap(seed) {
         });
     }
 }
+export async function migrateLegacyCatalogsToDb(seed) {
+    await ensureStorage();
+    await ensureSchema();
+    await syncCatalogEntriesFromSeed(seed);
+    await invalidateBootstrapCache();
+}
 export async function bootstrapDatabase() {
     await ensureStorage();
     await ensureSchema();
@@ -385,19 +465,7 @@ export async function bootstrapDatabase() {
     }
     if (!(await tableHasRows('catalog_schemas'))) {
         const seed = await readSeed();
-        const catalogs = (seed.catalogs ?? {});
-        if (catalogs.ramoSchemas) {
-            await exec('INSERT INTO catalog_schemas (name, payload_json) VALUES (:name, :payload_json)', {
-                name: 'ramoSchemas',
-                payload_json: JSON.stringify(catalogs.ramoSchemas)
-            });
-        }
-        if (catalogs.danosEmpresarialesSchema) {
-            await exec('INSERT INTO catalog_schemas (name, payload_json) VALUES (:name, :payload_json)', {
-                name: 'danosEmpresarialesSchema',
-                payload_json: JSON.stringify(catalogs.danosEmpresarialesSchema)
-            });
-        }
+        await syncCatalogSchemasFromSeed(seed);
     }
 }
 export async function handleBootstrap() {
