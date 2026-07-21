@@ -52,4 +52,4 @@ npm run build
 
 ## Estado
 
-La versión React + TypeScript + MySQL con el ajuste de `Vendedores` y `Asegurado` quedó publicada como `v0.0.15`.
+La versión React + TypeScript + MySQL con el ajuste de `Vendedores` y `Asegurado` quedó publicada como `v0.0.16`.

@@ -174,18 +174,23 @@ function ComboField({
   hint
 }) {
   const [query, setQuery] = useState(value || '');
+  const [searchTerm, setSearchTerm] = useState('');
   const [open, setOpen] = useState(false);
   const normalizedOptions = useMemo(() => (options || []).map(getComboOption).filter((option) => option.label || option.value), [options]);
 
   useEffect(() => {
     const selected = normalizedOptions.find((option) => option.value === String(value || ''));
     setQuery(selected?.label || String(value || ''));
+    setSearchTerm('');
   }, [value, normalizedOptions]);
 
   const filtered = useMemo(() => {
-    const q = query.toLowerCase();
+    const q = searchTerm.trim().toLowerCase();
+    if (!q) {
+      return normalizedOptions.slice(0, 250);
+    }
     return normalizedOptions.filter((item) => item.label.toLowerCase().includes(q)).slice(0, 250);
-  }, [normalizedOptions, query]);
+  }, [normalizedOptions, searchTerm]);
 
   return (
     <div className="combo-field">
@@ -197,7 +202,9 @@ function ComboField({
           disabled={disabled}
           onFocus={() => setOpen(true)}
           onChange={(event) => {
-            setQuery(event.target.value);
+            const nextValue = event.target.value;
+            setQuery(nextValue);
+            setSearchTerm(nextValue);
             onSelect('');
             setOpen(true);
           }}
@@ -216,8 +223,9 @@ function ComboField({
                   onMouseDown={(event) => {
                     event.preventDefault();
                     setQuery(option.label);
+                    setSearchTerm('');
                     onSelect(option.value);
-                    setOpen(false);
+                    setOpen(true);
                   }}
                 >
                   {option.label}
@@ -439,6 +447,7 @@ function App() {
   const captureFiles = capture.files || [];
   const polizaFiles = captureFiles.filter((file) => file.cat === 'poliza');
   const needsSubramo = !!capture.ramo && !isVehiculos(capture.ramo) && subramoOptions.length > 0;
+  const showCaptureContextCombos = false;
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -818,8 +827,8 @@ function App() {
   }
 
   async function savePoliza() {
-    if (!capture.linea || !capture.gerencia || !capture.vendedor || !capture.asegurado || !capture.ramo) {
-      openErrorModal('Faltan datos', 'Completa línea, gerencia, vendedor, asegurado y ramo.');
+    if (!capture.vendedor || !capture.asegurado || !capture.ramo) {
+      openErrorModal('Faltan datos', 'Completa vendedor, asegurado y ramo.');
       return;
     }
     if (needsSubramo && !capture.subramo) {
@@ -1025,44 +1034,48 @@ function App() {
           <div className="page-grid">
           <Card
             badge="1"
-            title="Asignación comercial"
-            subtitle="Línea de negocio, gerencia, vendedor, asegurado y ramo"
+            title="Asignación de captura"
+            subtitle="Selecciona vendedor, asegurado y ramo para continuar"
           >
             <div className="combo-grid">
-              <ComboField
-                label="Línea de negocio"
-                value={capture.linea}
-                options={lineOptions}
-                placeholder="Selecciona la línea"
-                hint={`${lineOptions.length} opciones`}
-                onSelect={(value) =>
-                  setCapture((current) => ({
-                    ...current,
-                    linea: value,
-                    gerencia: '',
-                    vendedor: '',
-                    asegurado: '',
-                    ramo: '',
-                    subramo: ''
-                  }))
-                }
-              />
-              <ComboField
-                label="Gerencia"
-                value={capture.gerencia}
-                options={gerenciaOptions}
-                placeholder="Selecciona la gerencia"
-                hint={`${gerenciaOptions.length} opciones`}
-                disabled={!capture.linea}
-                onSelect={(value) =>
-                  setCapture((current) => ({
-                    ...current,
-                    gerencia: value,
-                    vendedor: '',
-                    asegurado: ''
-                  }))
-                }
-              />
+              {showCaptureContextCombos ? (
+                <ComboField
+                  label="Línea de negocio"
+                  value={capture.linea}
+                  options={lineOptions}
+                  placeholder="Selecciona la línea"
+                  hint={`${lineOptions.length} opciones`}
+                  onSelect={(value) =>
+                    setCapture((current) => ({
+                      ...current,
+                      linea: value,
+                      gerencia: '',
+                      vendedor: '',
+                      asegurado: '',
+                      ramo: '',
+                      subramo: ''
+                    }))
+                  }
+                />
+              ) : null}
+              {showCaptureContextCombos ? (
+                <ComboField
+                  label="Gerencia"
+                  value={capture.gerencia}
+                  options={gerenciaOptions}
+                  placeholder="Selecciona la gerencia"
+                  hint={`${gerenciaOptions.length} opciones`}
+                  disabled={!capture.linea}
+                  onSelect={(value) =>
+                    setCapture((current) => ({
+                      ...current,
+                      gerencia: value,
+                      vendedor: '',
+                      asegurado: ''
+                    }))
+                  }
+                />
+              ) : null}
               <ComboField
                 label="Vendedor"
                 value={capture.vendedor}
@@ -1129,8 +1142,8 @@ function App() {
 
           <Card
             badge="2"
-            title="Subir póliza"
-            subtitle="Carga la póliza principal, el recibo y otros documentos"
+            title="Documentos de respaldo"
+            subtitle="Carga la póliza principal, el recibo y otros archivos"
           >
             <div className="file-grid">
               <label className="dropzone">
@@ -1177,7 +1190,7 @@ function App() {
             </div>
           </Card>
 
-          <Card title="Resumen de prima" subtitle="Cálculo simple con los campos de la póliza">
+          <Card title="Resumen de prima" subtitle="Revisa importes antes de guardar">
             <div className="summary-grid">
               <div>
                 <span>Subtotal estimado</span>
@@ -1196,7 +1209,7 @@ function App() {
           {captureSchema ? (
             <Card
               title={`Datos del ramo${capture.ramo === 'Daños' && capture.subramo === 'Empresariales' ? ' · Daños / Empresariales' : capture.ramo ? ` · ${capture.ramo}` : ''}`}
-              subtitle="Campos específicos del ramo seleccionado"
+              subtitle="Completa la información específica del ramo"
             >
               <div className="ramo-grid">
                 {(captureSchema.main || []).map(([key, label]) => (
@@ -1225,7 +1238,7 @@ function App() {
             </Card>
           ) : null}
 
-          <Card title="Formulario de póliza" subtitle="Campos del documento legible por IA">
+          <Card title="Formulario de póliza" subtitle="Datos extraídos para validar la captura">
             <SectionFields
               sections={sections}
               fields={fields}
