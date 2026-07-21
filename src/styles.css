@@ -63,12 +63,33 @@ a {
   gap: 6px;
 }
 
+.title-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
 .topbar h1,
 .hero-card h1 {
   margin: 0;
   font-size: clamp(2rem, 3vw, 3.25rem);
   line-height: 1.05;
   letter-spacing: -0.04em;
+}
+
+.version-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgba(239, 91, 43, 0.12);
+  color: var(--brand);
+  font-size: 0.84rem;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
 }
 
 .topbar p,
@@ -115,12 +136,6 @@ a {
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
-}
-
-.topbar-status {
-  color: var(--muted);
-  font-size: 0.92rem;
-  white-space: nowrap;
 }
 
 .tabs {

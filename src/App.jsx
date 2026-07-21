@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import appPackage from '../package.json';
 import {
   bootstrapApp,
   createAsegurado,
@@ -340,6 +341,7 @@ function AttachmentsList({ items, onRemove, onDownload }) {
 }
 
 function App() {
+  const publishedVersion = `v${appPackage.version}`;
   const [activeTab, setActiveTab] = useState('captura');
   const [boot, setBoot] = useState(EMPTY_BOOT);
   const [loading, setLoading] = useState(true);
@@ -816,7 +818,10 @@ function App() {
     <div className="app-shell">
       <header className="topbar">
         <div className="topbar-main">
-          <h1>Captura de Pólizas</h1>
+          <div className="title-row">
+            <h1>Captura de Pólizas</h1>
+            <span className="version-chip">{publishedVersion}</span>
+          </div>
           <button type="button" className="context-switch" aria-label="Seleccionar unidad">
             <span>{capture.linea || 'C.F. Anzures'}</span>
             <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -824,7 +829,6 @@ function App() {
             </svg>
           </button>
         </div>
-        <div className="topbar-status">{bootVersion || 'React + MySQL'}</div>
       </header>
 
       <nav className="tabs">
