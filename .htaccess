@@ -1,0 +1,9 @@
+RewriteEngine On
+
+RewriteCond %{REQUEST_URI} !^/api\.php$ [NC]
+RewriteCond %{REQUEST_URI} !^/assets/ [NC]
+RewriteCond %{REQUEST_URI} !^/legacy/ [NC]
+RewriteCond %{REQUEST_URI} !^/scripts/ [NC]
+RewriteCond %{REQUEST_URI} !^/storage/ [NC]
+RewriteCond %{REQUEST_URI} !\.(?:css|js|mjs|map|json|svg|png|jpe?g|gif|webp|ico|txt|woff2?|ttf|otf)$ [NC]
+RewriteRule ^ index.html [L]

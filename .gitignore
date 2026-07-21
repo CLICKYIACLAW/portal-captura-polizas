@@ -1,0 +1,8 @@
+node_modules/
+dist/
+storage/*.sqlite
+storage/bootstrap.json
+storage/uploads/
+!storage/bootstrap.json
+!.gitkeep
+*.log

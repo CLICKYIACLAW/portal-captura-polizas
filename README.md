@@ -1,27 +1,42 @@
 # Portal de Captura de Pólizas
 
-Portal web de Click Seguros para capturar, validar y dar de alta pólizas de forma centralizada.
+Portal de Click Seguros migrado a **React + SQLite** para capturar, validar y administrar pólizas, asegurados, grupos y bitácora desde una sola interfaz moderna.
 
-## Qué incluye
+## Qué incluye ahora
 
-- Flujo de captura comercial por `línea -> gerencia -> vendedor -> asegurado -> ramo/subramo`
-- Carga de póliza, recibo y documentos adicionales
-- Lectura/validación asistida del contenido de la póliza
-- Alta de asegurados y grupos
-- Bitácora de trabajo
+- Navegación en React con tabs en este orden:
+  - Captura
+  - Alta de asegurados
+  - Pólizas
+  - Bitácora
+- Persistencia real en SQLite.
+- API en `api.php` para bootstrap y CRUD básico.
+- Catálogos legados importados desde el monolito original.
+- Carga de archivos para pólizas y descarga desde el registro SQL.
+- Lectura asistida con Anthropic desde el navegador cuando se captura una póliza.
 
 ## Estructura
 
-- `index.html`: portal principal con HTML, CSS y JS embebidos
-- `brand/`: logos e iconografía
-- `capturapolizas.clickseguros.lat.conf`: configuración Apache para producción
-- `capturapolizas.remote.conf`: referencia de despliegue remoto
+- `index.html`: entrada de Vite para la app React.
+- `src/`: interfaz, componentes y estilos.
+- `api.php`: API PHP que habla con SQLite.
+- `scripts/seed-legacy.mjs`: genera la semilla SQL desde el legado.
+- `legacy/index-monolith.html`: copia del portal anterior para bootstrap/migración.
+- `storage/`: base SQLite y archivos generados en ejecución.
 
-## Estado actual
+## Desarrollo
 
-El proyecto está concentrado en un solo archivo principal y ya quedó publicado en GitHub como repositorio privado para empezar a colaborar y ordenar el flujo de trabajo.
+```bash
+npm install
+npm run dev
+```
 
-## Versión inicial
+## Build
 
-`v0.0.1`
+```bash
+npm run build
+```
 
+## Estado
+
+La primera versión React + SQL de la migración quedó publicada como `v0.0.6`.
