@@ -312,7 +312,7 @@ function App() {
   const [capture, setCapture] = useState(emptyCapture());
   const [alta, setAlta] = useState(emptyAlta());
   const [altaReturnToCapture, setAltaReturnToCapture] = useState(false);
-  const [bootVersion, setBootVersion] = useState('React + SQL');
+  const [bootVersion, setBootVersion] = useState('React + MySQL');
 
   const catalogs = boot.catalogs || EMPTY_BOOT.catalogs;
   const records = boot.records || EMPTY_BOOT.records;
@@ -336,7 +336,7 @@ function App() {
       .then((payload) => {
         if (!mounted) return;
         setBoot(payload);
-        setBootVersion(`SQL ${payload?.catalogs ? 'listo' : ''}`.trim());
+        setBootVersion(`MySQL ${payload?.catalogs ? 'listo' : ''}`.trim());
         setCapture(emptyCapture(payload?.catalogs?.fields?.length || 0));
         setLoading(false);
       })
@@ -498,7 +498,7 @@ function App() {
   async function loadAgain() {
     const payload = await bootstrapApp();
     setBoot(payload);
-    setBootVersion(`SQL ${payload?.catalogs ? 'listo' : ''}`.trim());
+    setBootVersion(`MySQL ${payload?.catalogs ? 'listo' : ''}`.trim());
   }
 
   async function callAnthropic(content) {
@@ -760,7 +760,7 @@ function App() {
         <div className="hero-card">
           <span className="eyebrow">Click Seguros</span>
           <h1>Portal de Captura de Pólizas</h1>
-          <p>Cargando React + SQL...</p>
+          <p>Cargando React + MySQL...</p>
         </div>
       </div>
     );
@@ -782,11 +782,11 @@ function App() {
     <div className="app-shell">
       <header className="topbar">
         <div>
-          <span className="eyebrow">Click Seguros · React + SQL</span>
+          <span className="eyebrow">Click Seguros · React + MySQL</span>
           <h1>Portal de Captura de Pólizas</h1>
           <p>
             Flujo de captura comercial, altas, pólizas y bitácora, ahora separado en componentes y
-            persistido en SQLite.
+            persistido en MySQL.
           </p>
         </div>
         <div className="topbar-meta">
@@ -1191,7 +1191,7 @@ function App() {
           </Card>
 
           <div className="stack">
-            <Card title="Asegurados" subtitle="Persistidos en SQLite">
+            <Card title="Asegurados" subtitle="Persistidos en MySQL">
               {records.asegurados.length ? (
                 <div className="records-list">
                   {records.asegurados.map((record) => (
@@ -1297,7 +1297,7 @@ function App() {
 
       {activeTab === 'bitacora' ? (
         <div className="page-grid">
-          <Card title="Bitácora de trabajo" subtitle="Acciones guardadas en SQLite">
+            <Card title="Bitácora de trabajo" subtitle="Acciones guardadas en MySQL">
             {records.log.length ? (
               <div className="records-list">
                 {records.log.map((entry) => (
@@ -1318,7 +1318,7 @@ function App() {
       ) : null}
 
       <footer className="footer">
-        <span>Portal migrado a React + SQL</span>
+        <span>Portal migrado a React + MySQL</span>
         <span>{bootVersion}</span>
       </footer>
     </div>

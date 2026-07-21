@@ -1,6 +1,8 @@
 RewriteEngine On
 
-RewriteCond %{REQUEST_URI} !^/api\.php$ [NC]
+RewriteRule ^api(?:\.php)?$ http://127.0.0.1:3001/api [P,L,QSA]
+
+RewriteCond %{REQUEST_URI} !^/api(?:\.php)?$ [NC]
 RewriteCond %{REQUEST_URI} !^/assets/ [NC]
 RewriteCond %{REQUEST_URI} !^/legacy/ [NC]
 RewriteCond %{REQUEST_URI} !^/scripts/ [NC]

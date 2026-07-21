@@ -1,0 +1,605 @@
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { ensureSchema, exec, queryOne, queryRows, tableHasRows } from './db.js';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const projectRoot = path.resolve(__dirname, '..');
+export const storageDir = path.join(projectRoot, 'storage');
+export const seedPath = path.join(storageDir, 'bootstrap.json');
+export const cachePath = path.join(storageDir, 'bootstrap-cache.json');
+export const legacySqlitePath = path.join(storageDir, 'portal.sqlite');
+const apiBase = '/api';
+function normalizeText(value) {
+    return String(value ?? '').trim().replace(/\s+/g, ' ');
+}
+function normalizeFileName(value) {
+    return String(value ?? 'archivo').replace(/[^A-Za-z0-9._-]+/g, '_');
+}
+async function ensureStorage() {
+    await mkdir(path.join(storageDir, 'uploads'), { recursive: true });
+}
+export async function readSeed() {
+    const raw = await readFile(seedPath, 'utf8');
+    return JSON.parse(raw);
+}
+export async function readBootstrapCache() {
+    try {
+        const raw = await readFile(cachePath, 'utf8');
+        const decoded = JSON.parse(raw);
+        return decoded?.ok ? decoded : null;
+    }
+    catch {
+        return null;
+    }
+}
+export async function writeBootstrapCache(payload) {
+    await writeFile(cachePath, JSON.stringify(payload));
+}
+export async function invalidateBootstrapCache() {
+    try {
+        await rm(cachePath);
+    }
+    catch {
+        // ignore
+    }
+}
+export async function buildBootstrapResponseFromSeed(seed) {
+    const catalogs = (seed.catalogs ?? {});
+    const records = (seed.records ?? {});
+    return {
+        ok: true,
+        catalogs,
+        records: {
+            polizas: Array.isArray(records.polizas) ? records.polizas : [],
+            asegurados: Array.isArray(records.asegurados) ? records.asegurados : [],
+            grupos: Array.isArray(records.grupos) ? records.grupos : [],
+            log: Array.isArray(records.log) ? records.log : []
+        }
+    };
+}
+async function loadSchemasFromDb() {
+    const rows = await queryRows('SELECT name, payload_json FROM catalog_schemas ORDER BY name ASC');
+    const schemas = {};
+    for (const row of rows) {
+        try {
+            schemas[row.name] = JSON.parse(row.payload_json || '[]');
+        }
+        catch {
+            schemas[row.name] = [];
+        }
+    }
+    return schemas;
+}
+async function loadCatalogsFromDb() {
+    const rows = await queryRows('SELECT kind, name, parent_name FROM catalog_entries ORDER BY sort_order ASC, id ASC');
+    const catalogs = {
+        lineas: [],
+        gerencias: {},
+        vendedores: {},
+        asegurados: {},
+        ramos: [],
+        subramos: {}
+    };
+    const gerencias = catalogs.gerencias;
+    const vendedores = catalogs.vendedores;
+    const asegurados = catalogs.asegurados;
+    const subramos = catalogs.subramos;
+    for (const row of rows) {
+        const kind = String(row.kind);
+        const name = String(row.name);
+        const parent = String(row.parent_name ?? '');
+        if (kind === 'linea') {
+            catalogs.lineas.push(name);
+            continue;
+        }
+        if (kind === 'gerencia') {
+            gerencias[parent] ??= [];
+            gerencias[parent].push(name);
+            continue;
+        }
+        if (kind === 'vendedor') {
+            vendedores[parent] ??= [];
+            vendedores[parent].push(name);
+            continue;
+        }
+        if (kind === 'asegurado') {
+            asegurados[parent] ??= [];
+            asegurados[parent].push(name);
+            continue;
+        }
+        if (kind === 'ramo') {
+            catalogs.ramos.push(name);
+            continue;
+        }
+        if (kind === 'subramo') {
+            subramos[parent] ??= [];
+            subramos[parent].push(name);
+        }
+    }
+    for (const bucket of [gerencias, vendedores, asegurados, subramos]) {
+        for (const key of Object.keys(bucket)) {
+            bucket[key] = Array.from(new Set(bucket[key]));
+        }
+    }
+    return catalogs;
+}
+async function loadPolizas() {
+    const rows = await queryRows('SELECT * FROM polizas ORDER BY created_at DESC');
+    return rows.map((row) => {
+        let attachments = [];
+        try {
+            attachments = JSON.parse(String(row.attachments_json ?? '[]'));
+        }
+        catch {
+            attachments = [];
+        }
+        const mappedAttachments = attachments.map((attachment, index) => ({
+            ...attachment,
+            downloadUrl: `${apiBase}?action=polizas.download&id=${encodeURIComponent(String(row.id))}&index=${index}`
+        }));
+        return {
+            id: String(row.id),
+            fecha: Number(row.created_at ?? 0),
+            linea: String(row.linea ?? ''),
+            gerencia: String(row.gerencia ?? ''),
+            vendedor: String(row.vendedor ?? ''),
+            asegurado: String(row.asegurado ?? ''),
+            ramo: String(row.ramo ?? ''),
+            subramo: row.subramo ?? null,
+            aseguradora: row.aseguradora ?? null,
+            poliza: row.poliza ?? null,
+            extraido: Boolean(Number(row.extraido ?? 0)),
+            layout: JSON.parse(String(row.layout_json ?? '[]')),
+            datos: JSON.parse(String(row.ramo_json ?? '{}')),
+            archivos: mappedAttachments,
+            noGuardados: JSON.parse(String(row.notes_json ?? '[]'))
+        };
+    });
+}
+async function loadAsegurados() {
+    const rows = await queryRows('SELECT * FROM asegurados ORDER BY created_at DESC');
+    return rows.map((row) => ({
+        id: String(row.id),
+        fecha: Number(row.created_at ?? 0),
+        nombre: String(row.nombre ?? ''),
+        tipo: String(row.tipo ?? ''),
+        apP: row.ap_paterno ?? null,
+        apM: row.ap_materno ?? null,
+        nombres: row.nombres ?? null,
+        razon: row.razon_social ?? null,
+        rfc: row.rfc ?? null,
+        email: row.email ?? null,
+        tel: row.telefono ?? null,
+        calle: row.calle ?? null,
+        numero: row.numero ?? null,
+        cp: row.cp ?? null,
+        colonia: row.colonia ?? null,
+        municipio: row.municipio ?? null,
+        estado: row.estado ?? null,
+        giro: row.giro ?? null,
+        regimen: row.regimen ?? null,
+        linea: row.linea ?? null,
+        gerencia: row.gerencia ?? null,
+        vendedor: row.vendedor ?? null,
+        grupo: row.grupo_nombre ?? null
+    }));
+}
+async function loadGrupos() {
+    const rows = await queryRows('SELECT * FROM grupos ORDER BY created_at DESC');
+    return rows.map((row) => ({
+        id: String(row.id),
+        fecha: Number(row.created_at ?? 0),
+        nombre: String(row.nombre ?? ''),
+        linea: row.linea ?? null,
+        gerencia: row.gerencia ?? null,
+        vendedor: row.vendedor ?? null,
+        asegurados: JSON.parse(String(row.asegurados_json ?? '[]'))
+    }));
+}
+async function loadLog() {
+    const rows = await queryRows('SELECT * FROM bitacora ORDER BY created_at DESC LIMIT 500');
+    return rows.map((row) => ({
+        id: Number(row.id ?? 0),
+        ts: Number(row.created_at ?? 0),
+        evento: String(row.evento ?? ''),
+        detalle: String(row.detalle ?? '')
+    }));
+}
+export async function buildBootstrapResponseFromDb() {
+    const seed = await readSeed();
+    const catalogs = {
+        ...(seed.catalogs ?? {}),
+        ...(await loadCatalogsFromDb()),
+        ...(await loadSchemasFromDb())
+    };
+    return {
+        ok: true,
+        catalogs,
+        records: {
+            polizas: await loadPolizas(),
+            asegurados: await loadAsegurados(),
+            grupos: await loadGrupos(),
+            log: await loadLog()
+        }
+    };
+}
+async function writeFileAttachment(recordId, index, file) {
+    const data = Buffer.from(String(file.data ?? ''), 'base64');
+    const safeName = normalizeFileName(file.name);
+    const dir = path.join(storageDir, 'uploads', recordId);
+    await mkdir(dir, { recursive: true });
+    const fileName = `${String(index).padStart(2, '0')}_${safeName}`;
+    const filePath = path.join(dir, fileName);
+    await writeFile(filePath, data);
+    return {
+        name: safeName,
+        type: String(file.type ?? 'application/octet-stream'),
+        cat: String(file.cat ?? 'otros'),
+        path: path.relative(projectRoot, filePath).split(path.sep).join('/'),
+        size: data.length
+    };
+}
+async function logEvent(evento, detalle) {
+    await exec('INSERT INTO bitacora (created_at, evento, detalle) VALUES (:created_at, :evento, :detalle)', {
+        created_at: Date.now(),
+        evento,
+        detalle
+    });
+}
+async function ensureGroup(nombre, context = {}) {
+    const cleanName = normalizeText(nombre);
+    if (!cleanName) {
+        throw new Error('El nombre del grupo es obligatorio');
+    }
+    const existing = await queryOne('SELECT * FROM grupos WHERE LOWER(nombre) = LOWER(:nombre) LIMIT 1', {
+        nombre: cleanName
+    });
+    if (existing) {
+        return { group: existing, created: false };
+    }
+    const group = {
+        id: `G${String(Date.now())}${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`,
+        created_at: Date.now(),
+        nombre: cleanName,
+        linea: context.linea ?? null,
+        gerencia: context.gerencia ?? null,
+        vendedor: context.vendedor ?? null,
+        asegurados_json: '[]'
+    };
+    await exec('INSERT INTO grupos (id, created_at, nombre, linea, gerencia, vendedor, asegurados_json) VALUES (:id, :created_at, :nombre, :linea, :gerencia, :vendedor, :asegurados_json)', group);
+    return { group, created: true };
+}
+async function appendGroupMember(groupName, member, context = {}) {
+    const { group } = await ensureGroup(groupName, context);
+    let members = [];
+    try {
+        members = JSON.parse(String(group.asegurados_json ?? '[]'));
+    }
+    catch {
+        members = [];
+    }
+    members.push(member);
+    members = Array.from(new Set(members.map((name) => normalizeText(name)).filter(Boolean)));
+    await exec('UPDATE grupos SET asegurados_json = :asegurados_json, linea = COALESCE(linea, :linea), gerencia = COALESCE(gerencia, :gerencia), vendedor = COALESCE(vendedor, :vendedor) WHERE LOWER(nombre) = LOWER(:nombre)', {
+        asegurados_json: JSON.stringify(members),
+        linea: context.linea ?? null,
+        gerencia: context.gerencia ?? null,
+        vendedor: context.vendedor ?? null,
+        nombre: groupName
+    });
+}
+async function seedFromBootstrap(seed) {
+    const catalogs = (seed.catalogs ?? {});
+    const records = (seed.records ?? {});
+    await exec('DELETE FROM catalog_entries');
+    await exec('DELETE FROM catalog_schemas');
+    await exec('DELETE FROM polizas');
+    await exec('DELETE FROM asegurados');
+    await exec('DELETE FROM grupos');
+    await exec('DELETE FROM bitacora');
+    let sort = 0;
+    for (const name of catalogs.lineas ?? []) {
+        await exec('INSERT INTO catalog_entries (kind, name, parent_kind, parent_name, meta_json, sort_order) VALUES (:kind, :name, :parent_kind, :parent_name, :meta_json, :sort_order)', {
+            kind: 'linea',
+            name,
+            parent_kind: null,
+            parent_name: null,
+            meta_json: '{}',
+            sort_order: sort++
+        });
+    }
+    const mapBuckets = [
+        ['gerencia', catalogs.gerencias ?? {}],
+        ['vendedor', catalogs.vendedores ?? {}],
+        ['asegurado', catalogs.asegurados ?? {}],
+        ['subramo', catalogs.subramos ?? {}]
+    ];
+    for (const [kind, bucket] of mapBuckets) {
+        for (const [parent, values] of Object.entries(bucket)) {
+            for (const name of values) {
+                await exec('INSERT INTO catalog_entries (kind, name, parent_kind, parent_name, meta_json, sort_order) VALUES (:kind, :name, :parent_kind, :parent_name, :meta_json, :sort_order)', {
+                    kind,
+                    name,
+                    parent_kind: kind === 'gerencia' || kind === 'vendedor' || kind === 'asegurado' || kind === 'subramo' ? 'linea' : null,
+                    parent_name: parent,
+                    meta_json: '{}',
+                    sort_order: sort++
+                });
+            }
+        }
+    }
+    for (const name of catalogs.ramos ?? []) {
+        await exec('INSERT INTO catalog_entries (kind, name, parent_kind, parent_name, meta_json, sort_order) VALUES (:kind, :name, :parent_kind, :parent_name, :meta_json, :sort_order)', {
+            kind: 'ramo',
+            name,
+            parent_kind: null,
+            parent_name: null,
+            meta_json: '{}',
+            sort_order: sort++
+        });
+    }
+    if (catalogs.ramoSchemas) {
+        await exec('INSERT INTO catalog_schemas (name, payload_json) VALUES (:name, :payload_json)', {
+            name: 'ramoSchemas',
+            payload_json: JSON.stringify(catalogs.ramoSchemas)
+        });
+    }
+    if (catalogs.danosEmpresarialesSchema) {
+        await exec('INSERT INTO catalog_schemas (name, payload_json) VALUES (:name, :payload_json)', {
+            name: 'danosEmpresarialesSchema',
+            payload_json: JSON.stringify(catalogs.danosEmpresarialesSchema)
+        });
+    }
+    const seedResponse = await buildBootstrapResponseFromSeed(seed);
+    await writeBootstrapCache(seedResponse);
+    const seedPolizas = Array.isArray(records.polizas) ? records.polizas : [];
+    for (const record of seedPolizas) {
+        const row = record;
+        await exec('INSERT INTO polizas (id, created_at, linea, gerencia, vendedor, asegurado, ramo, subramo, aseguradora, poliza, extraido, layout_json, ramo_json, attachments_json, notes_json) VALUES (:id, :created_at, :linea, :gerencia, :vendedor, :asegurado, :ramo, :subramo, :aseguradora, :poliza, :extraido, :layout_json, :ramo_json, :attachments_json, :notes_json)', {
+            id: row.id,
+            created_at: Number(row.created_at ?? 0),
+            linea: String(row.linea ?? ''),
+            gerencia: String(row.gerencia ?? ''),
+            vendedor: String(row.vendedor ?? ''),
+            asegurado: String(row.asegurado ?? ''),
+            ramo: String(row.ramo ?? ''),
+            subramo: row.subramo ?? null,
+            aseguradora: row.aseguradora ?? null,
+            poliza: row.poliza ?? null,
+            extraido: row.extraido ? 1 : 0,
+            layout_json: JSON.stringify(row.layout ?? []),
+            ramo_json: JSON.stringify(row.datos ?? {}),
+            attachments_json: JSON.stringify(row.archivos ?? []),
+            notes_json: JSON.stringify(row.noGuardados ?? [])
+        });
+    }
+}
+export async function bootstrapDatabase() {
+    await ensureStorage();
+    await ensureSchema();
+    if (!(await tableHasRows('catalog_entries'))) {
+        const seed = await readSeed();
+        await seedFromBootstrap(seed);
+        return;
+    }
+    if (!(await tableHasRows('catalog_schemas'))) {
+        const seed = await readSeed();
+        const catalogs = (seed.catalogs ?? {});
+        if (catalogs.ramoSchemas) {
+            await exec('INSERT INTO catalog_schemas (name, payload_json) VALUES (:name, :payload_json)', {
+                name: 'ramoSchemas',
+                payload_json: JSON.stringify(catalogs.ramoSchemas)
+            });
+        }
+        if (catalogs.danosEmpresarialesSchema) {
+            await exec('INSERT INTO catalog_schemas (name, payload_json) VALUES (:name, :payload_json)', {
+                name: 'danosEmpresarialesSchema',
+                payload_json: JSON.stringify(catalogs.danosEmpresarialesSchema)
+            });
+        }
+    }
+}
+export async function handleBootstrap() {
+    const cached = await readBootstrapCache();
+    if (cached) {
+        return cached;
+    }
+    await bootstrapDatabase();
+    const payload = await buildBootstrapResponseFromDb();
+    await writeBootstrapCache(payload);
+    return payload;
+}
+export async function createPoliza(input) {
+    await bootstrapDatabase();
+    await invalidateBootstrapCache();
+    const recordId = `P${String(Date.now())}${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`;
+    const createdAt = Number(input.fecha ?? Date.now());
+    const files = Array.isArray(input.files) ? input.files : [];
+    const storedFiles = [];
+    for (const [index, file] of files.entries()) {
+        if (!file || typeof file !== 'object' || !String(file.data ?? '')) {
+            continue;
+        }
+        storedFiles.push(await writeFileAttachment(recordId, index, file));
+    }
+    await exec('INSERT INTO polizas (id, created_at, linea, gerencia, vendedor, asegurado, ramo, subramo, aseguradora, poliza, extraido, layout_json, ramo_json, attachments_json, notes_json) VALUES (:id, :created_at, :linea, :gerencia, :vendedor, :asegurado, :ramo, :subramo, :aseguradora, :poliza, :extraido, :layout_json, :ramo_json, :attachments_json, :notes_json)', {
+        id: recordId,
+        created_at: createdAt,
+        linea: normalizeText(input.linea),
+        gerencia: normalizeText(input.gerencia),
+        vendedor: normalizeText(input.vendedor),
+        asegurado: normalizeText(input.asegurado),
+        ramo: normalizeText(input.ramo),
+        subramo: normalizeText(input.subramo),
+        aseguradora: normalizeText(input.aseguradora),
+        poliza: normalizeText(input.poliza),
+        extraido: input.extraido ? 1 : 0,
+        layout_json: JSON.stringify(input.layout ?? []),
+        ramo_json: JSON.stringify(input.datosRamo ?? {}),
+        attachments_json: JSON.stringify(storedFiles),
+        notes_json: JSON.stringify(input.noGuardados ?? [])
+    });
+    await logEvent('Póliza registrada', [
+        input.aseguradora,
+        input.poliza,
+        input.asegurado,
+        input.linea,
+        input.gerencia,
+        input.vendedor,
+        input.ramo
+    ]
+        .map((value) => normalizeText(value))
+        .filter(Boolean)
+        .join(' · '));
+    return {
+        ok: true,
+        record: {
+            id: recordId,
+            fecha: createdAt,
+            linea: normalizeText(input.linea),
+            gerencia: normalizeText(input.gerencia),
+            vendedor: normalizeText(input.vendedor),
+            asegurado: normalizeText(input.asegurado),
+            ramo: normalizeText(input.ramo),
+            subramo: normalizeText(input.subramo),
+            aseguradora: normalizeText(input.aseguradora),
+            poliza: normalizeText(input.poliza),
+            extraido: Boolean(input.extraido),
+            layout: input.layout ?? [],
+            datos: input.datosRamo ?? {},
+            archivos: storedFiles.map((file, index) => ({
+                ...file,
+                downloadUrl: `${apiBase}?action=polizas.download&id=${encodeURIComponent(recordId)}&index=${index}`
+            })),
+            noGuardados: input.noGuardados ?? []
+        }
+    };
+}
+export async function createAsegurado(input) {
+    await bootstrapDatabase();
+    await invalidateBootstrapCache();
+    const recordId = `A${String(Date.now())}${String(Math.floor(Math.random() * 1000)).padStart(3, '0')}`;
+    const createdAt = Number(input.fecha ?? Date.now());
+    const nombre = normalizeText(input.nombre);
+    if (!nombre) {
+        throw new Error('El nombre del asegurado es obligatorio');
+    }
+    await exec('INSERT INTO asegurados (id, created_at, nombre, tipo, ap_paterno, ap_materno, nombres, razon_social, rfc, email, telefono, calle, numero, cp, colonia, municipio, estado, giro, regimen, linea, gerencia, vendedor, grupo_nombre) VALUES (:id, :created_at, :nombre, :tipo, :ap_paterno, :ap_materno, :nombres, :razon_social, :rfc, :email, :telefono, :calle, :numero, :cp, :colonia, :municipio, :estado, :giro, :regimen, :linea, :gerencia, :vendedor, :grupo_nombre)', {
+        id: recordId,
+        created_at: createdAt,
+        nombre,
+        tipo: normalizeText(input.tipo || 'fisica'),
+        ap_paterno: normalizeText(input.apP) || null,
+        ap_materno: normalizeText(input.apM) || null,
+        nombres: normalizeText(input.nombres) || null,
+        razon_social: normalizeText(input.razon) || null,
+        rfc: normalizeText(input.rfc) || null,
+        email: normalizeText(input.email) || null,
+        telefono: normalizeText(input.tel) || null,
+        calle: normalizeText(input.calle) || null,
+        numero: normalizeText(input.numero) || null,
+        cp: normalizeText(input.cp) || null,
+        colonia: normalizeText(input.colonia) || null,
+        municipio: normalizeText(input.municipio) || null,
+        estado: normalizeText(input.estado) || null,
+        giro: normalizeText(input.giro) || null,
+        regimen: normalizeText(input.regimen) || null,
+        linea: normalizeText(input.linea),
+        gerencia: normalizeText(input.gerencia),
+        vendedor: normalizeText(input.vendedor),
+        grupo_nombre: normalizeText(input.grupo)
+    });
+    const group = normalizeText(input.grupo);
+    if (group) {
+        await appendGroupMember(group, nombre, {
+            linea: normalizeText(input.linea),
+            gerencia: normalizeText(input.gerencia),
+            vendedor: normalizeText(input.vendedor)
+        });
+    }
+    await logEvent('Asegurado dado de alta', `${nombre} → ${normalizeText(input.vendedor)} (${normalizeText(input.gerencia)}, ${normalizeText(input.linea)})`);
+    return {
+        ok: true,
+        record: {
+            id: recordId,
+            fecha: createdAt,
+            nombre,
+            tipo: normalizeText(input.tipo || 'fisica'),
+            apP: normalizeText(input.apP),
+            apM: normalizeText(input.apM),
+            nombres: normalizeText(input.nombres),
+            razon: normalizeText(input.razon),
+            rfc: normalizeText(input.rfc),
+            email: normalizeText(input.email),
+            tel: normalizeText(input.tel),
+            calle: normalizeText(input.calle),
+            numero: normalizeText(input.numero),
+            cp: normalizeText(input.cp),
+            colonia: normalizeText(input.colonia),
+            municipio: normalizeText(input.municipio),
+            estado: normalizeText(input.estado),
+            giro: normalizeText(input.giro),
+            regimen: normalizeText(input.regimen),
+            linea: normalizeText(input.linea),
+            gerencia: normalizeText(input.gerencia),
+            vendedor: normalizeText(input.vendedor),
+            grupo: normalizeText(input.grupo)
+        }
+    };
+}
+export async function createGrupo(input) {
+    await bootstrapDatabase();
+    await invalidateBootstrapCache();
+    const name = normalizeText(input.nombre);
+    if (!name) {
+        throw new Error('El nombre del grupo es obligatorio');
+    }
+    const { group, created } = await ensureGroup(name, {
+        linea: normalizeText(input.linea),
+        gerencia: normalizeText(input.gerencia),
+        vendedor: normalizeText(input.vendedor)
+    });
+    await logEvent(created ? 'Grupo dado de alta' : 'Grupo seleccionado', name);
+    return {
+        ok: true,
+        record: {
+            id: String(group.id),
+            fecha: Number(group.created_at ?? 0),
+            nombre: String(group.nombre ?? ''),
+            linea: group.linea ?? null,
+            gerencia: group.gerencia ?? null,
+            vendedor: group.vendedor ?? null,
+            asegurados: JSON.parse(String(group.asegurados_json ?? '[]'))
+        }
+    };
+}
+export async function createLog(input) {
+    await bootstrapDatabase();
+    await invalidateBootstrapCache();
+    await logEvent(normalizeText(input.evento || 'Evento'), normalizeText(input.detalle));
+    return { ok: true };
+}
+export async function getAttachmentResponse(id, index) {
+    await bootstrapDatabase();
+    const row = await queryOne('SELECT attachments_json FROM polizas WHERE id = :id LIMIT 1', { id });
+    if (!row) {
+        return null;
+    }
+    let attachments = [];
+    try {
+        attachments = JSON.parse(row.attachments_json || '[]');
+    }
+    catch {
+        attachments = [];
+    }
+    const attachment = attachments[index];
+    if (!attachment || !attachment.path) {
+        return null;
+    }
+    const filePath = path.join(projectRoot, String(attachment.path));
+    return {
+        contentType: String(attachment.type || 'application/octet-stream'),
+        filePath
+    };
+}

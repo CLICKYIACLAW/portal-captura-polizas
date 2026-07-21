@@ -1,20 +1,27 @@
 {
   "name": "portal-captura-polizas",
   "private": true,
-  "version": "0.0.6",
+  "version": "0.0.9",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "dev:api": "tsx watch server/src/index.ts",
+    "build:api": "tsc -p tsconfig.server.json",
+    "build": "npm run build:api && vite build",
     "preview": "vite preview",
+    "start:api": "node dist-server/index.js",
     "seed": "node scripts/seed-legacy.mjs"
   },
   "dependencies": {
+    "mysql2": "^3.14.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^5.0.0",
+    "@types/node": "^24.1.0",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2",
     "vite": "^7.0.0"
   }
 }

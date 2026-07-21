@@ -2,6 +2,7 @@ node_modules/
 dist/
 storage/*.sqlite
 storage/bootstrap.json
+storage/bootstrap-cache.json
 storage/uploads/
 !storage/bootstrap.json
 !.gitkeep

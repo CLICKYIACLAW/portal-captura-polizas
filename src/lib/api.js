@@ -1,6 +1,6 @@
 import { fetchJson } from './utils';
 
-const API_URL = '/api.php';
+const API_URL = '/api';
 
 export function bootstrapApp() {
   return fetchJson(`${API_URL}?action=bootstrap`);

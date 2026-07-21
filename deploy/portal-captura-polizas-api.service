@@ -1,0 +1,17 @@
+[Unit]
+Description=Portal Captura Polizas API (TypeScript)
+After=network.target mysql.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/html/portal-captura-polizas
+EnvironmentFile=/etc/portal-captura-polizas/mysql.env
+Environment=PORT=3001
+ExecStart=/usr/bin/node /var/www/html/portal-captura-polizas/dist-server/index.js
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target

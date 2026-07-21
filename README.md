@@ -1,6 +1,6 @@
 # Portal de Captura de Pólizas
 
-Portal de Click Seguros migrado a **React + SQLite** para capturar, validar y administrar pólizas, asegurados, grupos y bitácora desde una sola interfaz moderna.
+Portal de Click Seguros migrado a **React + TypeScript + MySQL** para capturar, validar y administrar pólizas, asegurados, grupos y bitácora desde una sola interfaz moderna.
 
 ## Qué incluye ahora
 
@@ -9,8 +9,8 @@ Portal de Click Seguros migrado a **React + SQLite** para capturar, validar y ad
   - Alta de asegurados
   - Pólizas
   - Bitácora
-- Persistencia real en SQLite.
-- API en `api.php` para bootstrap y CRUD básico.
+- Persistencia real en MySQL.
+- API en TypeScript para bootstrap y CRUD básico.
 - Catálogos legados importados desde el monolito original.
 - Carga de archivos para pólizas y descarga desde el registro SQL.
 - Lectura asistida con Anthropic desde el navegador cuando se captura una póliza.
@@ -19,10 +19,10 @@ Portal de Click Seguros migrado a **React + SQLite** para capturar, validar y ad
 
 - `index.html`: entrada de Vite para la app React.
 - `src/`: interfaz, componentes y estilos.
-- `api.php`: API PHP que habla con SQLite.
+- `server/src/`: API TypeScript que habla con MySQL.
 - `scripts/seed-legacy.mjs`: genera la semilla SQL desde el legado.
 - `legacy/index-monolith.html`: copia del portal anterior para bootstrap/migración.
-- `storage/`: base SQLite y archivos generados en ejecución.
+- `storage/`: semilla, archivos generados en ejecución y caché temporal del arranque.
 
 ## Desarrollo
 
@@ -30,6 +30,19 @@ Portal de Click Seguros migrado a **React + SQLite** para capturar, validar y ad
 npm install
 npm run dev
 ```
+
+### Configuración MySQL
+
+La API TypeScript lee estas variables de entorno:
+
+- `MYSQL_HOST` o `DB_HOST`
+- `MYSQL_PORT` o `DB_PORT`
+- `MYSQL_DATABASE` o `DB_NAME`
+- `MYSQL_USER` o `DB_USER`
+- `MYSQL_PASSWORD` o `DB_PASS`
+- `MYSQL_SOCKET` o `DB_SOCKET` opcional
+
+El backend corre en Node/TypeScript y expone la API pública en `/api`, reenviada por Apache hacia ese servicio.
 
 ## Build
 
@@ -39,4 +52,4 @@ npm run build
 
 ## Estado
 
-La primera versión React + SQL de la migración quedó publicada como `v0.0.6`.
+La primera versión React + TypeScript + MySQL de la migración quedó publicada como `v0.0.9`.
