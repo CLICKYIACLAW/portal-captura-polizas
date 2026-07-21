@@ -258,10 +258,10 @@ function ComboField({
   );
 }
 
-function Card({ title, subtitle, right, badge, children, tone = 'neutral' }) {
+function Card({ title, subtitle, right, badge, children, tone = 'neutral', headAlign = 'space-between' }) {
   return (
     <section className={`card tone-${tone}`}>
-      <div className="card-head">
+      <div className={`card-head align-${headAlign}`}>
         {badge ? <span className="section-badge">{badge}</span> : null}
         <div>
           <h3>{title}</h3>
@@ -1036,6 +1036,7 @@ function App() {
             badge="1"
             title="Asignación de captura"
             subtitle="Selecciona vendedor, asegurado y ramo para continuar"
+            headAlign="left"
           >
             <div className="combo-grid">
               {showCaptureContextCombos ? (
@@ -1082,7 +1083,7 @@ function App() {
                 options={vendedorOptions}
                 placeholder="Selecciona el vendedor"
                 hint={vendorsLoading ? 'Cargando vendedores...' : `${vendedorOptions.length} opciones`}
-                disabled={!capture.gerencia || vendorsLoading}
+                disabled={vendorsLoading || !vendedorOptions.length}
                 onSelect={(value) =>
                   setCapture((current) => ({
                     ...current,

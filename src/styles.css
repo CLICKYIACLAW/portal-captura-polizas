@@ -235,6 +235,14 @@ a {
   margin-bottom: 18px;
 }
 
+.card-head.align-left {
+  justify-content: flex-start;
+}
+
+.card-head.align-left > div {
+  flex: 1 1 auto;
+}
+
 .section-badge {
   flex: 0 0 auto;
   width: 28px;
