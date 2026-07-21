@@ -340,17 +340,56 @@ function AttachmentsList({ items, onRemove, onDownload }) {
   );
 }
 
+function Modal({ open, title, message, tone = 'danger', closeLabel = 'Cerrar', onClose }) {
+  if (!open) return null;
+
+  return (
+    <div className="modal-overlay" role="presentation">
+      <section
+        className={`modal-card tone-${tone}`}
+        role={tone === 'danger' ? 'alertdialog' : 'dialog'}
+        aria-modal="true"
+        aria-labelledby="app-modal-title"
+      >
+        <div className="modal-head">
+          <span className="eyebrow">{tone === 'danger' ? 'Error' : 'Aviso'}</span>
+          <button type="button" className="modal-close" onClick={onClose} aria-label={closeLabel}>
+            ×
+          </button>
+        </div>
+        <h2 id="app-modal-title">{title}</h2>
+        <p>{message}</p>
+        <div className="modal-actions">
+          <button type="button" className="primary-button" onClick={onClose}>
+            {closeLabel}
+          </button>
+        </div>
+      </section>
+    </div>
+  );
+}
+
 function App() {
   const publishedVersion = `v${appPackage.version}`;
+  const [gerenciaId, setGerenciaId] = useState('');
   const [activeTab, setActiveTab] = useState('captura');
   const [boot, setBoot] = useState(EMPTY_BOOT);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  const [errorModal, setErrorModal] = useState(null);
   const [toast, setToast] = useState('');
   const [capture, setCapture] = useState(emptyCapture());
   const [alta, setAlta] = useState(emptyAlta());
   const [altaReturnToCapture, setAltaReturnToCapture] = useState(false);
   const [bootVersion, setBootVersion] = useState('React + MySQL');
+  const isCaptureBlocked = !gerenciaId;
+
+  function openErrorModal(title, message) {
+    setErrorModal({ title, message });
+  }
+
+  function closeErrorModal() {
+    setErrorModal(null);
+  }
 
   const catalogs = boot.catalogs || EMPTY_BOOT.catalogs;
   const records = boot.records || EMPTY_BOOT.records;
@@ -369,8 +408,21 @@ function App() {
   const needsSubramo = !!capture.ramo && !isVehiculos(capture.ramo) && subramoOptions.length > 0;
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const rawId = params.get('idgerencia')?.trim() || '';
+    if (!rawId || !/^\d+$/.test(rawId)) {
+      setGerenciaId('');
+      setLoading(false);
+      openErrorModal(
+        'No se puede realizar la captura de pólizas',
+        'No se ha indicado la Gerencia en la URL. Agrega el querystring idgerencia con un valor entero largo para continuar.'
+      );
+      return undefined;
+    }
+
+    setGerenciaId(rawId);
     let mounted = true;
-    bootstrapApp()
+    bootstrapApp(rawId)
       .then((payload) => {
         if (!mounted) return;
         setBoot(payload);
@@ -380,7 +432,7 @@ function App() {
       })
       .catch((fetchError) => {
         if (!mounted) return;
-        setError(fetchError.message || 'No se pudo cargar el bootstrap');
+        openErrorModal('Error de arranque', fetchError.message || 'No se pudo cargar el bootstrap');
         setLoading(false);
       });
     return () => {
@@ -534,9 +586,13 @@ function App() {
   }
 
   async function loadAgain() {
-    const payload = await bootstrapApp();
-    setBoot(payload);
-    setBootVersion(`MySQL ${payload?.catalogs ? 'listo' : ''}`.trim());
+    try {
+      const payload = await bootstrapApp(gerenciaId);
+      setBoot(payload);
+      setBootVersion(`MySQL ${payload?.catalogs ? 'listo' : ''}`.trim());
+    } catch (fetchError) {
+      openErrorModal('Error de arranque', fetchError.message || 'No se pudo recargar el bootstrap');
+    }
   }
 
   async function callAnthropic(content) {
@@ -589,7 +645,7 @@ function App() {
   async function readCaptureDocument() {
     const doc = polizaFiles[0];
     if (!doc) {
-      pushToast('Carga una póliza antes de pedir lectura asistida');
+      openErrorModal('Falta un archivo', 'Carga una póliza antes de pedir lectura asistida.');
       return;
     }
 
@@ -611,17 +667,23 @@ function App() {
       .filter(Boolean)
       .join('\n');
 
-    const extracted = await callAnthropic([
-      {
-        type: 'document',
-        source: {
-          type: 'base64',
-          media_type: file.type,
-          data: content
-        }
-      },
-      { type: 'text', text: prompt }
-    ]);
+    let extracted;
+    try {
+      extracted = await callAnthropic([
+        {
+          type: 'document',
+          source: {
+            type: 'base64',
+            media_type: file.type,
+            data: content
+          }
+        },
+        { type: 'text', text: prompt }
+      ]);
+    } catch (anthropicError) {
+      openErrorModal('Error de lectura', anthropicError.message || 'No se pudo completar la lectura asistida.');
+      return;
+    }
 
     if (!extracted || typeof extracted !== 'object') {
       throw new Error('La respuesta de lectura no vino en formato JSON');
@@ -665,15 +727,15 @@ function App() {
 
   async function savePoliza() {
     if (!capture.linea || !capture.gerencia || !capture.vendedor || !capture.asegurado || !capture.ramo) {
-      pushToast('Completa línea, gerencia, vendedor, asegurado y ramo');
+      openErrorModal('Faltan datos', 'Completa línea, gerencia, vendedor, asegurado y ramo.');
       return;
     }
     if (needsSubramo && !capture.subramo) {
-      pushToast('Selecciona el subramo antes de guardar');
+      openErrorModal('Falta subramo', 'Selecciona el subramo antes de guardar.');
       return;
     }
     if (!polizaFiles.length) {
-      pushToast('Carga al menos la póliza principal');
+      openErrorModal('Falta archivo', 'Carga al menos la póliza principal.');
       return;
     }
 
@@ -686,21 +748,27 @@ function App() {
       }))
     );
 
-    await createPoliza({
-      linea: capture.linea,
-      gerencia: capture.gerencia,
-      vendedor: capture.vendedor,
-      asegurado: capture.asegurado,
-      ramo: capture.ramo,
-      subramo: capture.subramo,
-      aseguradora: capture.aseguradora,
-      poliza: capture.poliza,
-      extracted: capture.extracted,
-      layout: capture.layout,
-      datosRamo: capture.ramoData,
-      files,
-      noGuardados: []
-    });
+    try {
+      await createPoliza({
+        idgerencia: gerenciaId,
+        linea: capture.linea,
+        gerencia: capture.gerencia,
+        vendedor: capture.vendedor,
+        asegurado: capture.asegurado,
+        ramo: capture.ramo,
+        subramo: capture.subramo,
+        aseguradora: capture.aseguradora,
+        poliza: capture.poliza,
+        extracted: capture.extracted,
+        layout: capture.layout,
+        datosRamo: capture.ramoData,
+        files,
+        noGuardados: []
+      });
+    } catch (saveError) {
+      openErrorModal('Error al guardar póliza', saveError.message || 'No se pudo guardar la póliza.');
+      return;
+    }
 
     pushToast('Póliza guardada en SQL');
     resetCapture();
@@ -716,11 +784,11 @@ function App() {
             .join(' ');
 
     if (!nombre) {
-      pushToast('Completa el nombre del asegurado');
+      openErrorModal('Faltan datos', 'Completa el nombre del asegurado.');
       return;
     }
     if (!alta.linea || !alta.gerencia || !alta.vendedor) {
-      pushToast('Completa línea, gerencia y vendedor');
+      openErrorModal('Faltan datos', 'Completa línea, gerencia y vendedor.');
       return;
     }
 
@@ -748,15 +816,26 @@ function App() {
       grupo: alta.grupo
     };
 
-    await createAsegurado(payload);
+    try {
+      await createAsegurado({ ...payload, idgerencia: gerenciaId });
+    } catch (saveError) {
+      openErrorModal('Error al guardar asegurado', saveError.message || 'No se pudo guardar el asegurado.');
+      return;
+    }
     pushToast('Asegurado dado de alta');
     if (alta.grupo) {
-      await createGrupo({
-        nombre: alta.grupo,
-        linea: alta.linea,
-        gerencia: alta.gerencia,
-        vendedor: alta.vendedor
-      });
+      try {
+        await createGrupo({
+          idgerencia: gerenciaId,
+          nombre: alta.grupo,
+          linea: alta.linea,
+          gerencia: alta.gerencia,
+          vendedor: alta.vendedor
+        });
+      } catch (groupError) {
+        openErrorModal('Error al guardar grupo', groupError.message || 'No se pudo guardar el grupo.');
+        return;
+      }
     }
 
     if (altaReturnToCapture) {
@@ -775,15 +854,21 @@ function App() {
   async function createGroupFromAlta(name) {
     const grupo = normalizeText(name);
     if (!grupo) {
-      pushToast('Escribe un nombre de grupo');
+      openErrorModal('Faltan datos', 'Escribe un nombre de grupo.');
       return;
     }
-    await createGrupo({
-      nombre: grupo,
-      linea: alta.linea,
-      gerencia: alta.gerencia,
-      vendedor: alta.vendedor
-    });
+    try {
+      await createGrupo({
+        idgerencia: gerenciaId,
+        nombre: grupo,
+        linea: alta.linea,
+        gerencia: alta.gerencia,
+        vendedor: alta.vendedor
+      });
+    } catch (groupError) {
+      openErrorModal('Error al guardar grupo', groupError.message || 'No se pudo guardar el grupo.');
+      return;
+    }
     setAlta((current) => ({ ...current, grupo }));
     pushToast(`Grupo ${grupo} listo`);
     await loadAgain();
@@ -802,20 +887,8 @@ function App() {
     );
   }
 
-  if (error) {
-    return (
-      <div className="app-shell loading">
-        <div className="hero-card danger">
-          <span className="eyebrow">Error de arranque</span>
-          <h1>No pude cargar la captura</h1>
-          <p>{error}</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="app-shell">
+    <div className={`app-shell ${isCaptureBlocked ? 'blocked' : ''}`}>
       <header className="topbar">
         <div className="topbar-main">
           <div className="title-row">
@@ -823,7 +896,7 @@ function App() {
             <span className="version-chip">{publishedVersion}</span>
           </div>
           <button type="button" className="context-switch" aria-label="Seleccionar unidad">
-            <span>{capture.linea || 'C.F. Anzures'}</span>
+            <span>{gerenciaId ? `Gerencia #${gerenciaId}` : 'Gerencia no indicada'}</span>
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M7 10l5 5 5-5" />
             </svg>
@@ -831,7 +904,16 @@ function App() {
         </div>
       </header>
 
-      <nav className="tabs">
+      <Modal
+        open={Boolean(errorModal)}
+        title={errorModal?.title || 'Error'}
+        message={errorModal?.message || ''}
+        tone="danger"
+        onClose={closeErrorModal}
+      />
+
+      <main className="app-main">
+        <nav className="tabs">
         {TAB_IDS.map((tabId) => (
           <button
             key={tabId}
@@ -843,12 +925,12 @@ function App() {
             <span>{TAB_LABELS[tabId]}</span>
           </button>
         ))}
-      </nav>
+        </nav>
 
-      {toast ? <div className="toast show">{toast}</div> : null}
+        {toast ? <div className="toast show">{toast}</div> : null}
 
-      {activeTab === 'captura' ? (
-        <div className="page-grid">
+        {activeTab === 'captura' ? (
+          <div className="page-grid">
           <Card
             badge="1"
             title="Asignación comercial"
@@ -1059,11 +1141,11 @@ function App() {
               onChange={updateLayout}
             />
           </Card>
-        </div>
-      ) : null}
+          </div>
+        ) : null}
 
-      {activeTab === 'asegurados' ? (
-        <div className="page-grid two-col">
+        {activeTab === 'asegurados' ? (
+          <div className="page-grid two-col">
           <Card title="Alta de asegurados" subtitle="Catálogo SQL de asegurados y grupos">
             <div className="type-switch">
               <button
@@ -1282,11 +1364,11 @@ function App() {
               )}
             </Card>
           </div>
-        </div>
-      ) : null}
+          </div>
+        ) : null}
 
-      {activeTab === 'polizas' ? (
-        <div className="page-grid">
+        {activeTab === 'polizas' ? (
+          <div className="page-grid">
           <Card title="Pólizas registradas" subtitle="Consulta y descarga de archivos">
             {records.polizas.length ? (
               <div className="records-list">
@@ -1329,11 +1411,11 @@ function App() {
               <div className="empty-state">Aún no hay pólizas registradas en la base SQL.</div>
             )}
           </Card>
-        </div>
-      ) : null}
+          </div>
+        ) : null}
 
-      {activeTab === 'bitacora' ? (
-        <div className="page-grid">
+        {activeTab === 'bitacora' ? (
+          <div className="page-grid">
           <Card title="Bitácora de trabajo" subtitle="Acciones guardadas en MySQL">
             {records.log.length ? (
               <div className="records-list">
@@ -1351,13 +1433,14 @@ function App() {
               <div className="empty-state">La bitácora registrará aquí cada acción.</div>
             )}
           </Card>
-        </div>
-      ) : null}
+          </div>
+        ) : null}
 
-      <footer className="footer">
-        <span>Portal migrado a React + MySQL</span>
-        <span>{bootVersion}</span>
-      </footer>
+        <footer className="footer">
+          <span>Portal migrado a React + MySQL</span>
+          <span>{bootVersion}</span>
+        </footer>
+      </main>
     </div>
   );
 }

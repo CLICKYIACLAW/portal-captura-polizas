@@ -52,4 +52,4 @@ npm run build
 
 ## Estado
 
-La versión React + TypeScript + MySQL con el ajuste del encabezado quedó publicada como `v0.0.13`.
+La versión React + TypeScript + MySQL con el ajuste de `idgerencia` quedó publicada como `v0.0.14`.

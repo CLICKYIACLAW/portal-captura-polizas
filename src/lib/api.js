@@ -2,8 +2,12 @@ import { fetchJson } from './utils';
 
 const API_URL = '/api';
 
-export function bootstrapApp() {
-  return fetchJson(`${API_URL}?action=bootstrap`);
+export function bootstrapApp(idGerencia) {
+  const params = new URLSearchParams({ action: 'bootstrap' });
+  if (idGerencia) {
+    params.set('idgerencia', idGerencia);
+  }
+  return fetchJson(`${API_URL}?${params.toString()}`);
 }
 
 export function createPoliza(payload) {

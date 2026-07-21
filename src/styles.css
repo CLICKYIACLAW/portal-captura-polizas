@@ -49,6 +49,24 @@ a {
   padding: 26px 0 36px;
 }
 
+.app-main {
+  position: relative;
+}
+
+.app-shell.blocked .app-main {
+  filter: saturate(0.9);
+}
+
+.app-shell.blocked .app-main::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background: rgba(244, 245, 247, 0.36);
+  backdrop-filter: blur(2px);
+  pointer-events: none;
+  z-index: 20;
+}
+
 .topbar {
   display: flex;
   align-items: flex-end;
@@ -684,6 +702,66 @@ a {
 .toast.show {
   opacity: 1;
   transform: translateY(0);
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(17, 24, 39, 0.45);
+  backdrop-filter: blur(6px);
+}
+
+.modal-card {
+  width: min(560px, 100%);
+  border-radius: 24px;
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.22);
+  background: #fff;
+  padding: 22px;
+}
+
+.modal-card.tone-danger {
+  background: linear-gradient(180deg, #fff7f7 0%, #fff 100%);
+}
+
+.modal-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 14px;
+}
+
+.modal-close {
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 1.8rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.modal-card h2 {
+  margin: 0 0 8px;
+  font-size: 1.4rem;
+  line-height: 1.2;
+}
+
+.modal-card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 18px;
 }
 
 .loading {
