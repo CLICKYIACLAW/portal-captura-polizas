@@ -1,7 +1,17 @@
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import http from 'node:http';
-import { bootstrapDatabase, createAsegurado, createGrupo, createLog, createPoliza, getAttachmentResponse, handleBootstrap } from './bootstrap.js';
+import {
+  bootstrapDatabase,
+  createAsegurado,
+  createGrupo,
+  createLog,
+  createPoliza,
+  fetchBiAsegurados,
+  fetchBiVendedores,
+  getAttachmentResponse,
+  handleBootstrap
+} from './bootstrap.js';
 
 const port = Number(process.env.PORT || 3001);
 const host = process.env.HOST || '127.0.0.1';
@@ -58,6 +68,30 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse): Promi
     if (method === 'GET' && action === 'bootstrap') {
       const payload = await handleBootstrap();
       sendJson(res, 200, payload);
+      return;
+    }
+
+    if (method === 'GET' && action === 'vendedores.list') {
+      const idGerencia = url.searchParams.get('idgerencia') || '';
+      if (!idGerencia) {
+        sendJson(res, 400, { ok: false, error: 'Falta el querystring idgerencia' });
+        return;
+      }
+
+      const vendedores = await fetchBiVendedores(idGerencia);
+      sendJson(res, 200, { ok: true, vendedores });
+      return;
+    }
+
+    if (method === 'GET' && action === 'asegurados.list') {
+      const idVendedor = url.searchParams.get('idvendedor') || '';
+      if (!idVendedor) {
+        sendJson(res, 400, { ok: false, error: 'Falta el querystring idvendedor' });
+        return;
+      }
+
+      const asegurados = await fetchBiAsegurados(idVendedor);
+      sendJson(res, 200, { ok: true, asegurados });
       return;
     }
 

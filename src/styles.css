@@ -220,7 +220,7 @@ a {
   border-radius: 20px;
   box-shadow: var(--shadow);
   padding: 24px;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .card.tone-neutral {
@@ -344,8 +344,9 @@ a {
   right: 0;
   top: calc(100% + 8px);
   z-index: 6;
-  max-height: 320px;
+  max-height: min(240px, calc(100vh - 220px));
   overflow: auto;
+  overscroll-behavior: contain;
   padding: 8px;
   border-radius: 16px;
   border: 1px solid rgba(17, 24, 39, 0.12);
@@ -572,7 +573,7 @@ a {
   border: 1px solid rgba(17, 24, 39, 0.08);
   border-radius: 16px;
   background: #fff;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .section-card summary {

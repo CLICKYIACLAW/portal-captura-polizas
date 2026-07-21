@@ -27,6 +27,12 @@ export const seedPath = path.join(storageDir, 'bootstrap.json');
 export const cachePath = path.join(storageDir, 'bootstrap-cache.json');
 export const legacySqlitePath = path.join(storageDir, 'portal.sqlite');
 const apiBase = '/api';
+const biTokenUrl = 'https://ws.developmentservices.com.mx/BIFranquicias/AutorizaId/Token/generar';
+const biVendedoresUrl = 'https://ws.developmentservices.com.mx/BIFranquicias/Sicas/Generar/CKIA_Captura_Trae_Vendedores';
+const biAseguradosUrl = 'https://ws.developmentservices.com.mx/BIFranquicias/Sicas/Generar/CKIA_Captura_Trae_Asegurados';
+const biClientId = 'ClickIA';
+const biStaticToken =
+  '6Vqe/9+YKj+mUmDapL5lTvgoEQyh10DW2rWuX2YzJSlMjuFL9jeRc8Hrs1k5yWfA986nayzTIyw8biLU/8C93big9fQx3dMXj8NwUock98CydCTvciSpuqo2EFLEe7/6';
 
 function normalizeText(value: unknown): string {
   return String(value ?? '').trim().replace(/\s+/g, ' ');
@@ -36,8 +42,113 @@ function normalizeFileName(value: unknown): string {
   return String(value ?? 'archivo').replace(/[^A-Za-z0-9._-]+/g, '_');
 }
 
+type BiTokenResponse = {
+  ATkn?: string;
+  [key: string]: unknown;
+};
+
+type BiVendedorItem = {
+  Texto?: string;
+  Valor?: string;
+  [key: string]: unknown;
+};
+
+type BiVendedoresResponse = {
+  Respuesta?: boolean;
+  MError?: string;
+  Valores?: BiVendedorItem[];
+  [key: string]: unknown;
+};
+
+type BiAseguradosResponse = BiVendedoresResponse;
+
+function responseErrorMessage(payload: Record<string, unknown>, fallback: string): string {
+  const message = payload.message;
+  return typeof message === 'string' && message.trim() ? message : fallback;
+}
+
 async function ensureStorage(): Promise<void> {
   await mkdir(path.join(storageDir, 'uploads'), { recursive: true });
+}
+
+async function fetchBiToken(): Promise<string> {
+  const response = await fetch(biTokenUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ Id: biClientId })
+  });
+
+  const text = await response.text();
+  let payload: BiTokenResponse = {};
+  try {
+    payload = text ? (JSON.parse(text) as BiTokenResponse) : {};
+  } catch {
+    throw new Error('No se pudo parsear el token de BI');
+  }
+
+  if (!response.ok) {
+    throw new Error(responseErrorMessage(payload as Record<string, unknown>, `Error HTTP ${response.status}`));
+  }
+
+  if (!payload.ATkn) {
+    throw new Error('La API de token no devolvió ATkn');
+  }
+
+  return String(payload.ATkn);
+}
+
+async function fetchBiList(
+  url: string,
+  body: Record<string, unknown>,
+  errorContext: string
+): Promise<Array<{ Texto: string; Valor: string }>> {
+  const token = await fetchBiToken();
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `FId ${token}`,
+      token: biStaticToken,
+      id: biClientId,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body),
+    redirect: 'follow'
+  });
+
+  const text = await response.text();
+  let payload: BiVendedoresResponse = {};
+  try {
+    payload = text ? (JSON.parse(text) as BiVendedoresResponse) : {};
+  } catch {
+    throw new Error(`La API de ${errorContext} devolvió una respuesta inválida`);
+  }
+
+  if (!response.ok) {
+    throw new Error(responseErrorMessage(payload as Record<string, unknown>, `Error HTTP ${response.status}`));
+  }
+
+  if (payload.Respuesta === false) {
+    throw new Error(payload.MError || `No se pudieron cargar los ${errorContext}`);
+  }
+
+  if (!Array.isArray(payload.Valores)) {
+    throw new Error(`La API de ${errorContext} devolvió un formato inválido`);
+  }
+
+  return payload.Valores.map((item) => ({
+    Texto: String(item.Texto ?? '').trim(),
+    Valor: String(item.Valor ?? '').trim()
+  })).filter((item) => item.Texto && item.Valor);
+}
+
+export async function fetchBiVendedores(idGerencia: string | number): Promise<Array<{ Texto: string; Valor: string }>> {
+  return fetchBiList(biVendedoresUrl, { IdGerencia: String(idGerencia) }, 'vendedores');
+}
+
+export async function fetchBiAsegurados(idVendedor: string | number): Promise<Array<{ Texto: string; Valor: string }>> {
+  return fetchBiList(biAseguradosUrl, { IdVendedor: String(idVendedor) }, 'asegurados');
 }
 
 export async function readSeed(): Promise<SeedFile> {

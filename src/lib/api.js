@@ -10,6 +10,22 @@ export function bootstrapApp(idGerencia) {
   return fetchJson(`${API_URL}?${params.toString()}`);
 }
 
+export function loadVendedores(idGerencia) {
+  const params = new URLSearchParams({ action: 'vendedores.list' });
+  if (idGerencia) {
+    params.set('idgerencia', idGerencia);
+  }
+  return fetchJson(`${API_URL}?${params.toString()}`);
+}
+
+export function loadAsegurados(idVendedor) {
+  const params = new URLSearchParams({ action: 'asegurados.list' });
+  if (idVendedor) {
+    params.set('idvendedor', idVendedor);
+  }
+  return fetchJson(`${API_URL}?${params.toString()}`);
+}
+
 export function createPoliza(payload) {
   return fetchJson(`${API_URL}?action=polizas.create`, {
     method: 'POST',

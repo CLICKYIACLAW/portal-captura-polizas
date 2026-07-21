@@ -6,7 +6,9 @@ import {
   createGrupo,
   createLog,
   createPoliza,
-  downloadAttachmentUrl
+  downloadAttachmentUrl,
+  loadAsegurados,
+  loadVendedores
 } from './lib/api';
 import {
   countFilled,
@@ -134,6 +136,31 @@ function fileExt(name) {
   return parts.length > 1 ? parts.pop() : '';
 }
 
+function getComboOption(option) {
+  if (typeof option === 'string' || typeof option === 'number') {
+    const value = String(option);
+    return { label: value, value };
+  }
+
+  if (!option || typeof option !== 'object') {
+    return { label: '', value: '' };
+  }
+
+  const label = String(
+    option.label ??
+      option.text ??
+      option.Texto ??
+      option.name ??
+      option.Nombre ??
+      option.value ??
+      option.valor ??
+      option.Valor ??
+      ''
+  ).trim();
+  const value = String(option.value ?? option.valor ?? option.Valor ?? option.id ?? option.Id ?? label).trim();
+  return { label, value };
+}
+
 function ComboField({
   label,
   value,
@@ -148,15 +175,17 @@ function ComboField({
 }) {
   const [query, setQuery] = useState(value || '');
   const [open, setOpen] = useState(false);
+  const normalizedOptions = useMemo(() => (options || []).map(getComboOption).filter((option) => option.label || option.value), [options]);
 
   useEffect(() => {
-    setQuery(value || '');
-  }, [value]);
+    const selected = normalizedOptions.find((option) => option.value === String(value || ''));
+    setQuery(selected?.label || String(value || ''));
+  }, [value, normalizedOptions]);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase();
-    return (options || []).filter((item) => item.toLowerCase().includes(q)).slice(0, 250);
-  }, [options, query]);
+    return normalizedOptions.filter((item) => item.label.toLowerCase().includes(q)).slice(0, 250);
+  }, [normalizedOptions, query]);
 
   return (
     <div className="combo-field">
@@ -181,17 +210,17 @@ function ComboField({
             {filtered.length ? (
               filtered.map((option) => (
                 <button
-                  key={option}
+                  key={option.value}
                   type="button"
-                  className={option === value ? 'selected' : ''}
+                  className={option.value === String(value || '') ? 'selected' : ''}
                   onMouseDown={(event) => {
                     event.preventDefault();
-                    setQuery(option);
-                    onSelect(option);
+                    setQuery(option.label);
+                    onSelect(option.value);
                     setOpen(false);
                   }}
                 >
-                  {option}
+                  {option.label}
                 </button>
               ))
             ) : (
@@ -381,6 +410,10 @@ function App() {
   const [alta, setAlta] = useState(emptyAlta());
   const [altaReturnToCapture, setAltaReturnToCapture] = useState(false);
   const [bootVersion, setBootVersion] = useState('React + MySQL');
+  const [vendorCatalog, setVendorCatalog] = useState([]);
+  const [insuredCatalog, setInsuredCatalog] = useState([]);
+  const [vendorsLoading, setVendorsLoading] = useState(false);
+  const [insuredLoading, setInsuredLoading] = useState(false);
   const isCaptureBlocked = !gerenciaId;
 
   function openErrorModal(title, message) {
@@ -397,8 +430,8 @@ function App() {
   const sections = catalogs.sections || [];
   const lineOptions = catalogs.lineas || [];
   const gerenciaOptions = catalogs.gerencias?.[capture.linea] || [];
-  const vendedorOptions = catalogs.vendedores?.[capture.gerencia] || [];
-  const aseguradoOptions = catalogs.asegurados?.[capture.vendedor] || [];
+  const vendedorOptions = vendorCatalog;
+  const aseguradoOptions = insuredCatalog;
   const ramoOptions = catalogs.ramos || [];
   const subramoOptions = catalogs.subramos?.[capture.ramo] || [];
   const captureSchema = getRamoSchema(catalogs, capture.ramo, capture.subramo);
@@ -422,17 +455,42 @@ function App() {
 
     setGerenciaId(rawId);
     let mounted = true;
+    setVendorCatalog([]);
+    setInsuredCatalog([]);
+    setVendorsLoading(true);
+    setInsuredLoading(true);
     bootstrapApp(rawId)
       .then((payload) => {
         if (!mounted) return;
         setBoot(payload);
         setBootVersion(`MySQL ${payload?.catalogs ? 'listo' : ''}`.trim());
         setCapture(emptyCapture(payload?.catalogs?.fields?.length || 0));
-        setLoading(false);
+        return loadVendedores(rawId)
+          .then((vendedoresPayload) => {
+            if (!mounted) return;
+            if (vendedoresPayload?.vendedores) {
+              setVendorCatalog(vendedoresPayload.vendedores);
+            }
+          })
+          .catch((vendorError) => {
+            if (!mounted) return;
+            setVendorCatalog([]);
+            openErrorModal('Error al cargar vendedores', vendorError.message || 'No se pudieron cargar los vendedores');
+          })
+          .finally(() => {
+            if (!mounted) return;
+            setVendorsLoading(false);
+            setInsuredLoading(false);
+            setLoading(false);
+          });
       })
       .catch((fetchError) => {
         if (!mounted) return;
-        openErrorModal('Error de arranque', fetchError.message || 'No se pudo cargar el bootstrap');
+        setVendorCatalog([]);
+        setInsuredCatalog([]);
+        setVendorsLoading(false);
+        setInsuredLoading(false);
+        openErrorModal('Error de arranque', fetchError.message || 'No se pudo cargar el bootstrap o la lista de vendedores');
         setLoading(false);
       });
     return () => {
@@ -448,6 +506,40 @@ function App() {
       }));
     }
   }, [fields.length]);
+
+  useEffect(() => {
+    let mounted = true;
+    const idVendedor = String(capture.vendedor || '').trim();
+    if (!idVendedor) {
+      setInsuredCatalog([]);
+      setInsuredLoading(false);
+      return undefined;
+    }
+
+    setInsuredLoading(true);
+    loadAsegurados(idVendedor)
+      .then((payload) => {
+        if (!mounted) return;
+        if (payload?.asegurados) {
+          setInsuredCatalog(payload.asegurados);
+        } else {
+          setInsuredCatalog([]);
+        }
+      })
+      .catch((insuredError) => {
+        if (!mounted) return;
+        setInsuredCatalog([]);
+        openErrorModal('Error al cargar asegurados', insuredError.message || 'No se pudieron cargar los asegurados');
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setInsuredLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [capture.vendedor]);
 
   const summary = useMemo(() => {
     const layout = capture.layout || [];
@@ -976,8 +1068,8 @@ function App() {
                 value={capture.vendedor}
                 options={vendedorOptions}
                 placeholder="Selecciona el vendedor"
-                hint={`${vendedorOptions.length} opciones`}
-                disabled={!capture.gerencia}
+                hint={vendorsLoading ? 'Cargando vendedores...' : `${vendedorOptions.length} opciones`}
+                disabled={!capture.gerencia || vendorsLoading}
                 onSelect={(value) =>
                   setCapture((current) => ({
                     ...current,
@@ -991,8 +1083,8 @@ function App() {
                 value={capture.asegurado}
                 options={aseguradoOptions}
                 placeholder="Escribe para buscar al asegurado"
-                hint={`${aseguradoOptions.length} opciones`}
-                disabled={!capture.vendedor}
+                hint={insuredLoading ? 'Cargando asegurados...' : `${aseguradoOptions.length} opciones`}
+                disabled={!capture.vendedor || insuredLoading}
                 onSelect={(value) =>
                   setCapture((current) => ({
                     ...current,
@@ -1196,9 +1288,10 @@ function App() {
               <ComboField
                 label="Vendedor"
                 value={alta.vendedor}
-                options={alta.gerencia ? catalogs.vendedores?.[alta.gerencia] || [] : []}
+                options={vendedorOptions}
                 placeholder="Selecciona el vendedor"
-                disabled={!alta.gerencia}
+                hint={vendorsLoading ? 'Cargando vendedores...' : `${vendedorOptions.length} opciones`}
+                disabled={!alta.gerencia || vendorsLoading}
                 onSelect={(value) => setAlta((current) => ({ ...current, vendedor: value }))}
               />
               <ComboField
