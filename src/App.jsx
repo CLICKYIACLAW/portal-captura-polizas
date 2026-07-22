@@ -544,6 +544,7 @@ function App() {
         setBoot(payload);
         setBootVersion(`MySQL ${payload?.catalogs ? 'listo' : ''}`.trim());
         setCapture(emptyCapture(payload?.catalogs?.fields?.length || 0));
+        setLoading(false);
         return Promise.allSettled([loadVendedores(), loadRamos()]).then(([vendorsResult, ramosResult]) => {
           if (!mounted) return;
 
@@ -571,7 +572,6 @@ function App() {
           setVendorsLoading(false);
           setRamosLoading(false);
           setInsuredLoading(false);
-          setLoading(false);
         });
       })
       .catch((fetchError) => {
