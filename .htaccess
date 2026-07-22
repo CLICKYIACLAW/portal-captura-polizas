@@ -1,4 +1,9 @@
 RewriteEngine On
+
+# Proxy the API to the local Node backend even if the virtual host rewrite is stale.
+RewriteRule ^api(?:\.php)?$ http://127.0.0.1:3001/api [P,L,QSA]
+
+# Keep direct navigation working for the React app.
 RewriteCond %{REQUEST_FILENAME} !-f
 RewriteCond %{REQUEST_FILENAME} !-d
 RewriteRule ^ index.html [L]

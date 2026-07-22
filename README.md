@@ -52,4 +52,4 @@ npm run build
 
 ## Estado
 
-La versión React + TypeScript + MySQL volvió a usar el backend TypeScript en `/api` para el login y la captura; quedó publicada como `v0.0.30`.
+La versión React + TypeScript + MySQL sin dependencia de `idgerencia` en la URL y con `auth_token_bi` desde `AutorizaId/Token/generar` quedó publicada como `v0.0.26`.
