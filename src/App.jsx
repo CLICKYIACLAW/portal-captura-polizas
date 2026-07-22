@@ -1145,6 +1145,7 @@ function App() {
             badge="2"
             title="Documentos de respaldo"
             subtitle="Carga la póliza principal, el recibo y otros archivos"
+            headAlign="left"
           >
             <div className="file-grid">
               <label className="dropzone">
@@ -1181,12 +1182,6 @@ function App() {
             <div className="actions-row">
               <button type="button" className="primary-button" onClick={readCaptureDocument} disabled={!polizaFiles.length}>
                 Leer póliza
-              </button>
-              <button type="button" className="secondary-button" onClick={savePoliza}>
-                Guardar póliza
-              </button>
-              <button type="button" className="ghost-button" onClick={resetCapture}>
-                Limpiar
               </button>
             </div>
           </Card>
@@ -1239,13 +1234,21 @@ function App() {
             </Card>
           ) : null}
 
-          <Card title="Formulario de póliza" subtitle="Datos extraídos para validar la captura">
+          <Card title="Formulario de póliza" subtitle="Datos extraídos para validar la captura" headAlign="left">
             <SectionFields
               sections={sections}
               fields={fields}
               layout={capture.layout}
               onChange={updateLayout}
             />
+            <div className="actions-row">
+              <button type="button" className="secondary-button" onClick={savePoliza}>
+                Guardar póliza
+              </button>
+              <button type="button" className="ghost-button" onClick={resetCapture}>
+                Limpiar
+              </button>
+            </div>
           </Card>
           </div>
         ) : null}
