@@ -1337,7 +1337,7 @@ function App() {
         ) : null}
 
         {activeTab === 'asegurados' ? (
-          <div className="page-grid two-col">
+          <div className="page-grid asegurados-page">
           <Card title="Alta de asegurados" subtitle="Catálogo SQL de asegurados y grupos">
             <div className="type-switch">
               <button
@@ -1502,61 +1502,6 @@ function App() {
             </div>
           </Card>
 
-          <div className="stack">
-            <Card title="Asegurados" subtitle="Persistidos en MySQL">
-              {records.asegurados.length ? (
-                <div className="records-list">
-                  {records.asegurados.map((record) => (
-                    <article className="record" key={record.id}>
-                      <div className="record-top">
-                        <div>
-                          <strong>{record.nombre}</strong>
-                          <div className="meta-row">
-                            <span className="pill">{record.tipo === 'moral' ? 'Moral' : 'Física'}</span>
-                            {record.grupo ? <span className="pill accent">Grupo: {record.grupo}</span> : null}
-                          </div>
-                        </div>
-                        <span className="date">{formatShortDate(record.fecha)}</span>
-                      </div>
-                      <p className="muted">
-                        {[record.rfc, record.email, record.tel].filter(Boolean).join(' · ')}
-                      </p>
-                      <p className="muted">
-                        {[record.linea, record.gerencia, record.vendedor].filter(Boolean).join(' · ')}
-                      </p>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <div className="empty-state">Aún no hay asegurados en la base SQL.</div>
-              )}
-            </Card>
-
-            <Card title="Grupos" subtitle="Catálogo independiente">
-              {records.grupos.length ? (
-                <div className="records-list">
-                  {records.grupos.map((group) => (
-                    <article className="record" key={group.id}>
-                      <div className="record-top">
-                        <div>
-                          <strong>{group.nombre}</strong>
-                          <div className="meta-row">
-                            <span className="pill">Grupo</span>
-                            <span className="pill accent">{group.asegurados?.length || 0} asegurados</span>
-                          </div>
-                        </div>
-                        <span className="date">{formatShortDate(group.fecha)}</span>
-                      </div>
-                      <p className="muted">{[group.linea, group.gerencia, group.vendedor].filter(Boolean).join(' · ')}</p>
-                      {group.asegurados?.length ? <p className="muted">{group.asegurados.join(' · ')}</p> : null}
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <div className="empty-state">Aún no hay grupos registrados.</div>
-              )}
-            </Card>
-          </div>
           </div>
         ) : null}
 
@@ -1629,10 +1574,6 @@ function App() {
           </div>
         ) : null}
 
-        <footer className="footer">
-          <span>Portal migrado a React + MySQL</span>
-          <span>{bootVersion}</span>
-        </footer>
       </main>
     </div>
   );
