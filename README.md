@@ -52,4 +52,4 @@ npm run build
 
 ## Estado
 
-La versión React + TypeScript + MySQL con el endpoint estable `api.php` para el backend quedó publicada como `v0.0.28`.
+La versión React + TypeScript + MySQL volvió a usar el backend TypeScript en `/api` para el login y la captura; quedó publicada como `v0.0.29`.
