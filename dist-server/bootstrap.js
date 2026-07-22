@@ -31,12 +31,13 @@ async function ensureStorage() {
     await mkdir(path.join(storageDir, 'uploads'), { recursive: true });
 }
 async function fetchBiToken() {
+    const auth_token_bi_payload = { Id: biClientId };
     const response = await fetch(biTokenUrl, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ Id: biClientId })
+        body: JSON.stringify(auth_token_bi_payload)
     });
     const text = await response.text();
     let payload = {};
@@ -55,13 +56,13 @@ async function fetchBiToken() {
     return String(payload.ATkn);
 }
 async function fetchBiList(url, body, errorContext) {
-    const token = await fetchBiToken();
+    const auth_token_bi = await fetchBiToken();
     const response = await fetch(url, {
         method: 'POST',
         headers: {
-            Authorization: `FId ${token}`,
+            Authorization: `FId ${auth_token_bi}`,
             token: biStaticToken,
-            id: biClientId,
+            id: 'ClickIA',
             'Content-Type': 'application/json'
         },
         body: JSON.stringify(body),

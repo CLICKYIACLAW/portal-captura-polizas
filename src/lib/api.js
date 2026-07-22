@@ -33,12 +33,13 @@ export async function fetchBiAuthToken() {
 
   if (!biAuthTokenPromise) {
     biAuthTokenPromise = (async () => {
+      const auth_token_bi_payload = { Id: BI_CLIENT_ID };
       const response = await fetch(BI_AUTH_TOKEN_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ Id: BI_CLIENT_ID })
+        body: JSON.stringify(auth_token_bi_payload)
       });
 
       const payload = await response.json().catch(() => ({}));
@@ -84,12 +85,12 @@ export function loadRamos() {
 }
 
 export async function buscarEjecutivos(busqueda) {
-  const authToken = await fetchBiAuthToken();
+  const auth_token_bi = await fetchBiAuthToken();
   const response = await fetch(BI_EXECUTIVES_URL, {
     method: 'POST',
     headers: {
-      Authorization: `FId ${authToken}`,
-      id: BI_CLIENT_ID,
+      Authorization: `FId ${auth_token_bi}`,
+      id: 'ClickIA',
       token: '6Vqe/9+YKj+mUmDapL5lTvgoEQyh10DW2rWuX2YzJSlMjuFL9jeRc8Hrs1k5yWfA986nayzTIyw8biLU/8C93big9fQx3dMXj8NwUock98CydCTvciSpuqo2EFLEe7/6',
       'Content-Type': 'application/json'
     },
