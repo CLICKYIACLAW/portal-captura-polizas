@@ -62,20 +62,12 @@ export async function fetchBiAuthToken() {
   return biAuthTokenPromise;
 }
 
-export function bootstrapApp(idGerencia) {
-  const params = new URLSearchParams({ action: 'bootstrap' });
-  if (idGerencia) {
-    params.set('idgerencia', idGerencia);
-  }
-  return fetchJson(`${API_URL}?${params.toString()}`);
+export function bootstrapApp() {
+  return fetchJson(`${API_URL}?action=bootstrap`);
 }
 
-export function loadVendedores(idGerencia) {
-  const params = new URLSearchParams({ action: 'vendedores.list' });
-  if (idGerencia) {
-    params.set('idgerencia', idGerencia);
-  }
-  return fetchJson(`${API_URL}?${params.toString()}`);
+export function loadVendedores() {
+  return fetchJson(`${API_URL}?action=vendedores.list`);
 }
 
 export function loadAsegurados(idVendedor) {

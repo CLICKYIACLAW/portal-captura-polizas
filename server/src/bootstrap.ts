@@ -145,8 +145,8 @@ async function fetchBiList(
   })).filter((item) => item.Texto && item.Valor);
 }
 
-export async function fetchBiVendedores(idGerencia: string | number): Promise<Array<{ Texto: string; Valor: string }>> {
-  return fetchBiList(biVendedoresUrl, { IdGerencia: String(idGerencia) }, 'vendedores');
+export async function fetchBiVendedores(): Promise<Array<{ Texto: string; Valor: string }>> {
+  return fetchBiList(biVendedoresUrl, {}, 'vendedores');
 }
 
 export async function fetchBiAsegurados(idVendedor: string | number): Promise<Array<{ Texto: string; Valor: string }>> {

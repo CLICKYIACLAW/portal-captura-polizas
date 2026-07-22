@@ -418,7 +418,6 @@ function App() {
   });
   const [loginEmail, setLoginEmail] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
-  const [gerenciaId, setGerenciaId] = useState('');
   const [activeTab, setActiveTab] = useState('captura');
   const [boot, setBoot] = useState(EMPTY_BOOT);
   const [loading, setLoading] = useState(() => Boolean(executive));
@@ -436,7 +435,6 @@ function App() {
   const [insuredLoading, setInsuredLoading] = useState(false);
   const [ramosLoading, setRamosLoading] = useState(false);
   const [subramosLoading, setSubramosLoading] = useState(false);
-  const isCaptureBlocked = !gerenciaId;
 
   function openErrorModal(title, message) {
     setErrorModal({ title, message });
@@ -523,7 +521,6 @@ function App() {
     }
     setExecutive(null);
     setBoot(EMPTY_BOOT);
-    setGerenciaId('');
     setActiveTab('captura');
     setCapture(emptyCapture());
     setAlta(emptyAlta());
@@ -532,19 +529,6 @@ function App() {
 
   useEffect(() => {
     if (!executive) return undefined;
-    const params = new URLSearchParams(window.location.search);
-    const rawId = params.get('idgerencia')?.trim() || '';
-    if (!rawId || !/^\d+$/.test(rawId)) {
-      setGerenciaId('');
-      setLoading(false);
-      openErrorModal(
-        'No se puede realizar la captura de pólizas',
-        'No se ha indicado la Gerencia en la URL. Agrega el querystring idgerencia con un valor entero largo para continuar.'
-      );
-      return undefined;
-    }
-
-    setGerenciaId(rawId);
     let mounted = true;
     setVendorCatalog([]);
     setInsuredCatalog([]);
@@ -554,13 +538,13 @@ function App() {
     setInsuredLoading(true);
     setRamosLoading(true);
     setSubramosLoading(false);
-    bootstrapApp(rawId)
+    bootstrapApp()
       .then((payload) => {
         if (!mounted) return;
         setBoot(payload);
         setBootVersion(`MySQL ${payload?.catalogs ? 'listo' : ''}`.trim());
         setCapture(emptyCapture(payload?.catalogs?.fields?.length || 0));
-        return Promise.allSettled([loadVendedores(rawId), loadRamos()]).then(([vendorsResult, ramosResult]) => {
+        return Promise.allSettled([loadVendedores(), loadRamos()]).then(([vendorsResult, ramosResult]) => {
           if (!mounted) return;
 
           if (vendorsResult.status === 'fulfilled' && vendorsResult.value?.vendedores) {
@@ -838,7 +822,7 @@ function App() {
 
   async function loadAgain() {
     try {
-      const payload = await bootstrapApp(gerenciaId);
+      const payload = await bootstrapApp();
       setBoot(payload);
       setBootVersion(`MySQL ${payload?.catalogs ? 'listo' : ''}`.trim());
     } catch (fetchError) {
@@ -997,7 +981,6 @@ function App() {
 
     try {
       await createPoliza({
-        idgerencia: gerenciaId,
         linea: capture.linea,
         gerencia: capture.gerencia,
         vendedor: capture.vendedor,
@@ -1064,7 +1047,7 @@ function App() {
     };
 
     try {
-      await createAsegurado({ ...payload, idgerencia: gerenciaId });
+      await createAsegurado(payload);
     } catch (saveError) {
       openErrorModal('Error al guardar asegurado', saveError.message || 'No se pudo guardar el asegurado.');
       return;
@@ -1073,7 +1056,6 @@ function App() {
     if (alta.grupo) {
       try {
         await createGrupo({
-          idgerencia: gerenciaId,
           nombre: alta.grupo,
           linea: alta.linea,
           gerencia: alta.gerencia,
@@ -1106,7 +1088,6 @@ function App() {
     }
     try {
       await createGrupo({
-        idgerencia: gerenciaId,
         nombre: grupo,
         linea: alta.linea,
         gerencia: alta.gerencia,
@@ -1184,7 +1165,7 @@ function App() {
   return (
     <>
       {errorModalNode}
-      <div className={`app-shell ${isCaptureBlocked ? 'blocked' : ''}`}>
+      <div className="app-shell">
       <header className="topbar">
         <div className="topbar-main">
           <div className="title-row">

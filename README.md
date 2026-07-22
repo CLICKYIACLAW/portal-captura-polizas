@@ -52,4 +52,4 @@ npm run build
 
 ## Estado
 
-La versión React + TypeScript + MySQL con el ajuste para obtener `auth_token_bi` desde `AutorizaId/Token/generar` quedó publicada como `v0.0.25`.
+La versión React + TypeScript + MySQL sin dependencia de `idgerencia` en la URL y con `auth_token_bi` desde `AutorizaId/Token/generar` quedó publicada como `v0.0.26`.

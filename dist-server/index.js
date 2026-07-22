@@ -52,12 +52,7 @@ async function route(req, res) {
             return;
         }
         if (method === 'GET' && action === 'vendedores.list') {
-            const idGerencia = url.searchParams.get('idgerencia') || '';
-            if (!idGerencia) {
-                sendJson(res, 400, { ok: false, error: 'Falta el querystring idgerencia' });
-                return;
-            }
-            const vendedores = await fetchBiVendedores(idGerencia);
+            const vendedores = await fetchBiVendedores();
             sendJson(res, 200, { ok: true, vendedores });
             return;
         }

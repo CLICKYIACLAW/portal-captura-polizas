@@ -89,8 +89,8 @@ async function fetchBiList(url, body, errorContext) {
         Valor: String(item.Valor ?? '').trim()
     })).filter((item) => item.Texto && item.Valor);
 }
-export async function fetchBiVendedores(idGerencia) {
-    return fetchBiList(biVendedoresUrl, { IdGerencia: String(idGerencia) }, 'vendedores');
+export async function fetchBiVendedores() {
+    return fetchBiList(biVendedoresUrl, {}, 'vendedores');
 }
 export async function fetchBiAsegurados(idVendedor) {
     return fetchBiList(biAseguradosUrl, { IdVendedor: String(idVendedor) }, 'asegurados');
