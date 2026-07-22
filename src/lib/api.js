@@ -4,6 +4,7 @@ const API_URL = '/api';
 const BI_CLIENT_ID = 'ClickIA';
 const BI_AUTH_TOKEN_URL = 'https://ws.developmentservices.com.mx/BIFranquicias/AutorizaId/Token/generar';
 const BI_EXECUTIVES_URL = 'https://ws.developmentservices.com.mx/BIFranquicias/Sicas/Generar/Buscar_Ejecutivos';
+const BI_EXECUTIVES_TOKEN = '6Vqe/9+YKj+mUmDapL5lTvgoEQyh10DW2rWuX2YzJSlMjuFL9jeRc8Hrs1k5yWfA986nayzTIyw8biLU/8C93big9fQx3dMXj8NwUock98CydCTvciSpuqo2EFLEe7/6';
 const BI_AUTH_TOKEN_CACHE_KEY = 'captura-polizas.bi-auth-token.v1';
 
 let biAuthTokenPromise = null;
@@ -91,7 +92,7 @@ export async function buscarEjecutivos(busqueda) {
     headers: {
       Authorization: `FId ${auth_token_bi}`,
       id: 'ClickIA',
-      token: '6Vqe/9+YKj+mUmDapL5lTvgoEQyh10DW2rWuX2YzJSlMjuFL9jeRc8Hrs1k5yWfA986nayzTIyw8biLU/8C93big9fQx3dMXj8NwUock98CydCTvciSpuqo2EFLEe7/6',
+      token: BI_EXECUTIVES_TOKEN,
       'Content-Type': 'application/json'
     },
     body: JSON.stringify({ Busqueda: busqueda }),
