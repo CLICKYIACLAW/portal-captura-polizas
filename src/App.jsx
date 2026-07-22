@@ -223,7 +223,7 @@ function ComboField({
                     setQuery(option.label);
                     setSearchTerm('');
                     onSelect(option.value);
-                    setOpen(true);
+                    setOpen(false);
                   }}
                 >
                   {option.label}

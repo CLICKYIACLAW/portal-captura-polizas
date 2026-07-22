@@ -52,4 +52,4 @@ npm run build
 
 ## Estado
 
-La versión React + TypeScript + MySQL con el ajuste de `Ramo` y `Subramo` quedó publicada como `v0.0.19`.
+La versión React + TypeScript + MySQL con el ajuste de `Ramo` y `Subramo` quedó publicada como `v0.0.20`.
