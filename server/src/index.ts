@@ -8,6 +8,8 @@ import {
   createLog,
   createPoliza,
   fetchBiAsegurados,
+  fetchBiRamos,
+  fetchBiSubramos,
   fetchBiVendedores,
   getAttachmentResponse,
   handleBootstrap
@@ -92,6 +94,24 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse): Promi
 
       const asegurados = await fetchBiAsegurados(idVendedor);
       sendJson(res, 200, { ok: true, asegurados });
+      return;
+    }
+
+    if (method === 'GET' && action === 'ramos.list') {
+      const ramos = await fetchBiRamos();
+      sendJson(res, 200, { ok: true, ramos });
+      return;
+    }
+
+    if (method === 'GET' && action === 'subramos.list') {
+      const idRamo = url.searchParams.get('idramo') || '';
+      if (!idRamo) {
+        sendJson(res, 400, { ok: false, error: 'Falta el querystring idramo' });
+        return;
+      }
+
+      const subramos = await fetchBiSubramos(idRamo);
+      sendJson(res, 200, { ok: true, subramos });
       return;
     }
 

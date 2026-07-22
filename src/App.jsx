@@ -8,6 +8,8 @@ import {
   createPoliza,
   downloadAttachmentUrl,
   loadAsegurados,
+  loadRamos,
+  loadSubramos,
   loadVendedores
 } from './lib/api';
 import {
@@ -111,10 +113,6 @@ function getRamoSchema(catalogs, ramo, subramo) {
     return catalogs.danosEmpresarialesSchema || null;
   }
   return catalogs.ramoSchemas?.[ramo] || null;
-}
-
-function isVehiculos(ramo) {
-  return normalizeKey(ramo) === normalizeKey('Vehículos');
 }
 
 function computeRamoLabels(schema) {
@@ -420,8 +418,12 @@ function App() {
   const [bootVersion, setBootVersion] = useState('React + MySQL');
   const [vendorCatalog, setVendorCatalog] = useState([]);
   const [insuredCatalog, setInsuredCatalog] = useState([]);
+  const [ramoCatalog, setRamoCatalog] = useState([]);
+  const [subramoCatalog, setSubramoCatalog] = useState([]);
   const [vendorsLoading, setVendorsLoading] = useState(false);
   const [insuredLoading, setInsuredLoading] = useState(false);
+  const [ramosLoading, setRamosLoading] = useState(false);
+  const [subramosLoading, setSubramosLoading] = useState(false);
   const isCaptureBlocked = !gerenciaId;
 
   function openErrorModal(title, message) {
@@ -440,13 +442,27 @@ function App() {
   const gerenciaOptions = catalogs.gerencias?.[capture.linea] || [];
   const vendedorOptions = vendorCatalog;
   const aseguradoOptions = insuredCatalog;
-  const ramoOptions = catalogs.ramos || [];
-  const subramoOptions = catalogs.subramos?.[capture.ramo] || [];
-  const captureSchema = getRamoSchema(catalogs, capture.ramo, capture.subramo);
+  const ramoOptions = ramoCatalog;
+  const subramoOptions = subramoCatalog;
+  const normalizedRamoOptions = useMemo(
+    () => (ramoOptions || []).map(getComboOption).filter((option) => option.label || option.value),
+    [ramoOptions]
+  );
+  const normalizedSubramoOptions = useMemo(
+    () => (subramoOptions || []).map(getComboOption).filter((option) => option.label || option.value),
+    [subramoOptions]
+  );
+  const selectedRamoOption =
+    normalizedRamoOptions.find((option) => option.value === String(capture.ramo || '')) || null;
+  const selectedSubramoOption =
+    normalizedSubramoOptions.find((option) => option.value === String(capture.subramo || '')) || null;
+  const selectedRamoLabel = selectedRamoOption?.label || String(capture.ramo || '');
+  const selectedSubramoLabel = selectedSubramoOption?.label || String(capture.subramo || '');
+  const showSubramo = normalizeKey(selectedRamoLabel) === normalizeKey('Daños');
+  const captureSchema = getRamoSchema(catalogs, selectedRamoLabel, selectedSubramoLabel);
   const ramoLabels = computeRamoLabels(captureSchema);
   const captureFiles = capture.files || [];
   const polizaFiles = captureFiles.filter((file) => file.cat === 'poliza');
-  const needsSubramo = !!capture.ramo && !isVehiculos(capture.ramo) && subramoOptions.length > 0;
   const showCaptureContextCombos = false;
 
   useEffect(() => {
@@ -466,39 +482,58 @@ function App() {
     let mounted = true;
     setVendorCatalog([]);
     setInsuredCatalog([]);
+    setRamoCatalog([]);
+    setSubramoCatalog([]);
     setVendorsLoading(true);
     setInsuredLoading(true);
+    setRamosLoading(true);
+    setSubramosLoading(false);
     bootstrapApp(rawId)
       .then((payload) => {
         if (!mounted) return;
         setBoot(payload);
         setBootVersion(`MySQL ${payload?.catalogs ? 'listo' : ''}`.trim());
         setCapture(emptyCapture(payload?.catalogs?.fields?.length || 0));
-        return loadVendedores(rawId)
-          .then((vendedoresPayload) => {
-            if (!mounted) return;
-            if (vendedoresPayload?.vendedores) {
-              setVendorCatalog(vendedoresPayload.vendedores);
-            }
-          })
-          .catch((vendorError) => {
-            if (!mounted) return;
+        return Promise.allSettled([loadVendedores(rawId), loadRamos()]).then(([vendorsResult, ramosResult]) => {
+          if (!mounted) return;
+
+          if (vendorsResult.status === 'fulfilled' && vendorsResult.value?.vendedores) {
+            setVendorCatalog(vendorsResult.value.vendedores);
+          } else {
             setVendorCatalog([]);
-            openErrorModal('Error al cargar vendedores', vendorError.message || 'No se pudieron cargar los vendedores');
-          })
-          .finally(() => {
-            if (!mounted) return;
-            setVendorsLoading(false);
-            setInsuredLoading(false);
-            setLoading(false);
-          });
+            const vendorReason =
+              vendorsResult.status === 'rejected' ? vendorsResult.reason : 'No se pudieron cargar los vendedores';
+            const vendorMessage =
+              vendorReason instanceof Error ? vendorReason.message : String(vendorReason || 'No se pudieron cargar los vendedores');
+            openErrorModal('Error al cargar vendedores', vendorMessage);
+          }
+
+          if (ramosResult.status === 'fulfilled' && ramosResult.value?.ramos) {
+            setRamoCatalog(ramosResult.value.ramos);
+          } else {
+            setRamoCatalog([]);
+            const ramoReason = ramosResult.status === 'rejected' ? ramosResult.reason : 'No se pudieron cargar los ramos';
+            const ramoMessage =
+              ramoReason instanceof Error ? ramoReason.message : String(ramoReason || 'No se pudieron cargar los ramos');
+            openErrorModal('Error al cargar ramos', ramoMessage);
+          }
+
+          setVendorsLoading(false);
+          setRamosLoading(false);
+          setInsuredLoading(false);
+          setLoading(false);
+        });
       })
       .catch((fetchError) => {
         if (!mounted) return;
         setVendorCatalog([]);
         setInsuredCatalog([]);
+        setRamoCatalog([]);
+        setSubramoCatalog([]);
         setVendorsLoading(false);
         setInsuredLoading(false);
+        setRamosLoading(false);
+        setSubramosLoading(false);
         openErrorModal('Error de arranque', fetchError.message || 'No se pudo cargar el bootstrap o la lista de vendedores');
         setLoading(false);
       });
@@ -549,6 +584,55 @@ function App() {
       mounted = false;
     };
   }, [capture.vendedor]);
+
+  useEffect(() => {
+    let mounted = true;
+    const ramoLabel = selectedRamoLabel.trim();
+    if (!ramoLabel || normalizeKey(ramoLabel) !== normalizeKey('Daños')) {
+      setSubramoCatalog([]);
+      setSubramosLoading(false);
+      setCapture((current) =>
+        current.subramo
+          ? {
+              ...current,
+              subramo: ''
+            }
+          : current
+      );
+      return undefined;
+    }
+
+    const idRamo = String(capture.ramo || '').trim();
+    if (!idRamo) {
+      setSubramoCatalog([]);
+      setSubramosLoading(false);
+      return undefined;
+    }
+
+    setSubramosLoading(true);
+    loadSubramos(idRamo)
+      .then((payload) => {
+        if (!mounted) return;
+        if (payload?.subramos) {
+          setSubramoCatalog(payload.subramos);
+        } else {
+          setSubramoCatalog([]);
+        }
+      })
+      .catch((subramoError) => {
+        if (!mounted) return;
+        setSubramoCatalog([]);
+        openErrorModal('Error al cargar subramos', subramoError.message || 'No se pudieron cargar los subramos');
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setSubramosLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [capture.ramo, selectedRamoLabel]);
 
   const summary = useMemo(() => {
     const layout = capture.layout || [];
@@ -831,10 +915,6 @@ function App() {
       openErrorModal('Faltan datos', 'Completa vendedor, asegurado y ramo.');
       return;
     }
-    if (needsSubramo && !capture.subramo) {
-      openErrorModal('Falta subramo', 'Selecciona el subramo antes de guardar.');
-      return;
-    }
     if (!polizaFiles.length) {
       openErrorModal('Falta archivo', 'Carga al menos la póliza principal.');
       return;
@@ -1114,26 +1194,29 @@ function App() {
                 label="Ramo"
                 value={capture.ramo}
                 options={ramoOptions}
-                placeholder="Primero elige al asegurado"
-                hint={`${ramoOptions.length} opciones`}
-                disabled={!capture.vendedor}
+                placeholder={ramosLoading ? 'Cargando ramos...' : 'Selecciona el ramo'}
+                hint={ramosLoading ? 'Cargando ramos...' : `${ramoOptions.length} opciones`}
+                disabled={ramosLoading || !ramoOptions.length}
                 onSelect={(value) =>
                   setCapture((current) => ({
                     ...current,
                     ramo: value,
-                    subramo: ''
+                    subramo: '',
+                    ramoData: {}
                   }))
                 }
               />
-              <ComboField
-                label="Subramo"
-                value={capture.subramo}
-                options={subramoOptions}
-                placeholder={isVehiculos(capture.ramo) ? 'Vehículos no usa subramo' : 'Selecciona el subramo'}
-                hint={`${subramoOptions.length} opciones`}
-                disabled={!capture.ramo || isVehiculos(capture.ramo)}
-                onSelect={(value) => setCapture((current) => ({ ...current, subramo: value }))}
-              />
+              {showSubramo ? (
+                <ComboField
+                  label="Subramo"
+                  value={capture.subramo}
+                  options={subramoOptions}
+                  placeholder={subramosLoading ? 'Cargando subramos...' : 'Selecciona el subramo'}
+                  hint={subramosLoading ? 'Cargando subramos...' : `${subramoOptions.length} opciones`}
+                  disabled={subramosLoading || !subramoOptions.length}
+                  onSelect={(value) => setCapture((current) => ({ ...current, subramo: value }))}
+                />
+              ) : null}
             </div>
 
             <div className="capture-highlight">
@@ -1204,7 +1287,7 @@ function App() {
 
           {captureSchema ? (
             <Card
-              title={`Datos del ramo${capture.ramo === 'Daños' && capture.subramo === 'Empresariales' ? ' · Daños / Empresariales' : capture.ramo ? ` · ${capture.ramo}` : ''}`}
+              title={`Datos del ramo${selectedRamoLabel ? ` · ${selectedRamoLabel}` : ''}${showSubramo && selectedSubramoLabel ? ` / ${selectedSubramoLabel}` : ''}`}
               subtitle="Completa la información específica del ramo"
             >
               <div className="ramo-grid">

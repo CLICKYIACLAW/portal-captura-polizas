@@ -26,6 +26,19 @@ export function loadAsegurados(idVendedor) {
   return fetchJson(`${API_URL}?${params.toString()}`);
 }
 
+export function loadRamos() {
+  const params = new URLSearchParams({ action: 'ramos.list' });
+  return fetchJson(`${API_URL}?${params.toString()}`);
+}
+
+export function loadSubramos(idRamo) {
+  const params = new URLSearchParams({ action: 'subramos.list' });
+  if (idRamo) {
+    params.set('idramo', idRamo);
+  }
+  return fetchJson(`${API_URL}?${params.toString()}`);
+}
+
 export function createPoliza(payload) {
   return fetchJson(`${API_URL}?action=polizas.create`, {
     method: 'POST',

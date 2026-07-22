@@ -13,6 +13,8 @@ const apiBase = '/api';
 const biTokenUrl = 'https://ws.developmentservices.com.mx/BIFranquicias/AutorizaId/Token/generar';
 const biVendedoresUrl = 'https://ws.developmentservices.com.mx/BIFranquicias/Sicas/Generar/CKIA_Captura_Trae_Vendedores';
 const biAseguradosUrl = 'https://ws.developmentservices.com.mx/BIFranquicias/Sicas/Generar/CKIA_Captura_Trae_Asegurados';
+const biRamosUrl = 'https://ws.developmentservices.com.mx/BIFranquicias/Sicas/Generar/CKIA_Captura_Trae_Ramos';
+const biSubRamosUrl = 'https://ws.developmentservices.com.mx/BIFranquicias/Sicas/Generar/CKIA_Captura_Trae_SubRamos';
 const biClientId = 'ClickIA';
 const biStaticToken = '6Vqe/9+YKj+mUmDapL5lTvgoEQyh10DW2rWuX2YzJSlMjuFL9jeRc8Hrs1k5yWfA986nayzTIyw8biLU/8C93big9fQx3dMXj8NwUock98CydCTvciSpuqo2EFLEe7/6';
 function normalizeText(value) {
@@ -92,6 +94,12 @@ export async function fetchBiVendedores(idGerencia) {
 }
 export async function fetchBiAsegurados(idVendedor) {
     return fetchBiList(biAseguradosUrl, { IdVendedor: String(idVendedor) }, 'asegurados');
+}
+export async function fetchBiRamos() {
+    return fetchBiList(biRamosUrl, {}, 'ramos');
+}
+export async function fetchBiSubramos(idRamo) {
+    return fetchBiList(biSubRamosUrl, { IdRamo: String(idRamo) }, 'subramos');
 }
 export async function readSeed() {
     const raw = await readFile(seedPath, 'utf8');
