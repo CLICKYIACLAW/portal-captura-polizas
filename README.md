@@ -52,4 +52,4 @@ npm run build
 
 ## Estado
 
-La versión React + TypeScript + MySQL con la pantalla de inicio de sesión previa a `Captura` quedó publicada como `v0.0.23`.
+La versión React + TypeScript + MySQL con el ajuste del header `id: ClickIA` en la validación de inicio de sesión quedó publicada como `v0.0.24`.

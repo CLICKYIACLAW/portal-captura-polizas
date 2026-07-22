@@ -38,7 +38,7 @@ export async function buscarEjecutivos(busqueda) {
     method: 'POST',
     headers: {
       Authorization: BI_AUTH_TOKEN,
-      id: 'auditoria',
+      id: 'ClickIA',
       token: '6Vqe/9+YKj+mUmDapL5lTvgoEQyh10DW2rWuX2YzJSlMjuFL9jeRc8Hrs1k5yWfA986nayzTIyw8biLU/8C93big9fQx3dMXj8NwUock98CydCTvciSpuqo2EFLEe7/6',
       'Content-Type': 'application/json'
     },
