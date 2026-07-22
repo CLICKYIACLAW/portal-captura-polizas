@@ -1,6 +1,6 @@
 import { fetchJson } from './utils';
 
-const API_URL = '/api';
+const API_URL = import.meta.env.PROD ? '/api.php' : '/api';
 const BI_CLIENT_ID = 'ClickIA';
 const BI_AUTH_TOKEN_URL = 'https://ws.developmentservices.com.mx/BIFranquicias/AutorizaId/Token/generar';
 const BI_EXECUTIVES_URL = 'https://ws.developmentservices.com.mx/BIFranquicias/Sicas/Generar/Buscar_Ejecutivos';
