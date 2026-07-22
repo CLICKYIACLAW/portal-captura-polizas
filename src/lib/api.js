@@ -1,6 +1,8 @@
 import { fetchJson } from './utils';
 
 const API_URL = '/api';
+const BI_AUTH_TOKEN = 'FId {{auth_token_bi}}';
+const BI_EXECUTIVES_URL = 'https://ws.developmentservices.com.mx/BIFranquicias/Sicas/Generar/Buscar_Ejecutivos';
 
 export function bootstrapApp(idGerencia) {
   const params = new URLSearchParams({ action: 'bootstrap' });
@@ -29,6 +31,26 @@ export function loadAsegurados(idVendedor) {
 export function loadRamos() {
   const params = new URLSearchParams({ action: 'ramos.list' });
   return fetchJson(`${API_URL}?${params.toString()}`);
+}
+
+export async function buscarEjecutivos(busqueda) {
+  const response = await fetch(BI_EXECUTIVES_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: BI_AUTH_TOKEN,
+      id: 'auditoria',
+      token: '6Vqe/9+YKj+mUmDapL5lTvgoEQyh10DW2rWuX2YzJSlMjuFL9jeRc8Hrs1k5yWfA986nayzTIyw8biLU/8C93big9fQx3dMXj8NwUock98CydCTvciSpuqo2EFLEe7/6',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ Busqueda: busqueda }),
+    redirect: 'follow'
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.MError || `Error HTTP ${response.status}`);
+  }
+  return payload;
 }
 
 export function loadSubramos(idRamo) {

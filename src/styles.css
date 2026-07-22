@@ -49,6 +49,73 @@ a {
   padding: 26px 0 36px;
 }
 
+.login-screen {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(circle at top left, rgba(239, 91, 43, 0.18), transparent 32%),
+    radial-gradient(circle at bottom right, rgba(17, 24, 39, 0.08), transparent 30%),
+    linear-gradient(180deg, #fbfbfc 0%, #f4f5f7 100%);
+}
+
+.login-card {
+  width: min(560px, 100%);
+  padding: 32px;
+  border-radius: 28px;
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: var(--shadow);
+}
+
+.login-card h1 {
+  margin: 16px 0 8px;
+  font-size: clamp(2rem, 4vw, 3rem);
+  line-height: 1.06;
+  letter-spacing: -0.04em;
+}
+
+.login-card p {
+  margin: 0 0 22px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.login-form {
+  display: grid;
+  gap: 18px;
+}
+
+.login-field label {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 0.84rem;
+  color: #6b7280;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.login-field input {
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  border-radius: 14px;
+  background: #fff;
+  outline: none;
+}
+
+.login-field input:focus {
+  border-color: rgba(239, 91, 43, 0.55);
+  box-shadow: 0 0 0 3px rgba(239, 91, 43, 0.12);
+}
+
+.login-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
 .app-main {
   position: relative;
 }
@@ -154,6 +221,7 @@ a {
   stroke-width: 2;
   stroke-linecap: round;
   stroke-linejoin: round;
+  transform: rotate(-90deg);
 }
 
 .tabs {
@@ -844,5 +912,10 @@ a {
   }
   .tab {
     padding: 10px 14px;
+  }
+
+  .login-card {
+    padding: 22px;
+    border-radius: 20px;
   }
 }

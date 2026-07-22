@@ -52,4 +52,4 @@ npm run build
 
 ## Estado
 
-La versión React + TypeScript + MySQL con el ajuste para mostrar `Línea de negocio` y `Gerencia` en el tab `Captura` quedó publicada como `v0.0.22`.
+La versión React + TypeScript + MySQL con la pantalla de inicio de sesión previa a `Captura` quedó publicada como `v0.0.23`.

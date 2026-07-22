@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import appPackage from '../package.json';
 import {
+  buscarEjecutivos,
   bootstrapApp,
   createAsegurado,
   createGrupo,
@@ -30,6 +31,7 @@ const TAB_LABELS = {
   polizas: 'Pólizas',
   bitacora: 'Bitácora'
 };
+const AUTH_STORAGE_KEY = 'captura-polizas.auth.v1';
 const EMPTY_BOOT = {
   catalogs: {
     lineas: [],
@@ -406,10 +408,20 @@ function Modal({ open, title, message, tone = 'danger', closeLabel = 'Cerrar', o
 
 function App() {
   const publishedVersion = `v${appPackage.version}`;
+  const [executive, setExecutive] = useState(() => {
+    try {
+      const stored = window.sessionStorage.getItem(AUTH_STORAGE_KEY);
+      return stored ? JSON.parse(stored) : null;
+    } catch {
+      return null;
+    }
+  });
+  const [loginEmail, setLoginEmail] = useState('');
+  const [loginLoading, setLoginLoading] = useState(false);
   const [gerenciaId, setGerenciaId] = useState('');
   const [activeTab, setActiveTab] = useState('captura');
   const [boot, setBoot] = useState(EMPTY_BOOT);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => Boolean(executive));
   const [errorModal, setErrorModal] = useState(null);
   const [toast, setToast] = useState('');
   const [capture, setCapture] = useState(emptyCapture());
@@ -465,7 +477,61 @@ function App() {
   const polizaFiles = captureFiles.filter((file) => file.cat === 'poliza');
   const showCaptureContextCombos = true;
 
+  async function handleLogin(event) {
+    event.preventDefault();
+    const email = normalizeText(loginEmail);
+    if (!email) {
+      openErrorModal('Inicio de sesión', 'Escribe un correo electrónico para continuar.');
+      return;
+    }
+
+    setLoginLoading(true);
+    try {
+      const payload = await buscarEjecutivos(email);
+      if (!payload?.Respuesta) {
+        openErrorModal('No se pudo iniciar sesión', payload?.MError || 'El correo no fue validado.');
+        return;
+      }
+
+      const executiveList = Array.isArray(payload?.Ejecutivos) ? payload.Ejecutivos : [];
+      const selectedExecutive = executiveList[0] || null;
+      if (!selectedExecutive) {
+        openErrorModal('No se pudo iniciar sesión', 'La API respondió sin ejecutivos disponibles.');
+        return;
+      }
+
+      try {
+        window.sessionStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(selectedExecutive));
+      } catch {
+        // No-op: la sesión sigue en memoria aunque no haya storage persistente.
+      }
+
+      setExecutive(selectedExecutive);
+      setLoading(true);
+    } catch (error) {
+      openErrorModal('No se pudo iniciar sesión', error.message || 'No se pudo validar el correo.');
+    } finally {
+      setLoginLoading(false);
+    }
+  }
+
+  function handleLogout() {
+    try {
+      window.sessionStorage.removeItem(AUTH_STORAGE_KEY);
+    } catch {
+      // No-op.
+    }
+    setExecutive(null);
+    setBoot(EMPTY_BOOT);
+    setGerenciaId('');
+    setActiveTab('captura');
+    setCapture(emptyCapture());
+    setAlta(emptyAlta());
+    setLoading(false);
+  }
+
   useEffect(() => {
+    if (!executive) return undefined;
     const params = new URLSearchParams(window.location.search);
     const rawId = params.get('idgerencia')?.trim() || '';
     if (!rawId || !/^\d+$/.test(rawId)) {
@@ -540,7 +606,7 @@ function App() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [executive]);
 
   useEffect(() => {
     if (fields.length && capture.layout.length !== fields.length) {
@@ -1056,42 +1122,85 @@ function App() {
   }
 
   const captureMatchClass = `status-chip ${matchResult.tone}`;
+  const errorModalNode = errorModal ? (
+    <Modal
+      open={Boolean(errorModal)}
+      title={errorModal.title}
+      message={errorModal.message}
+      tone="danger"
+      onClose={closeErrorModal}
+    />
+  ) : null;
+
+  if (!executive) {
+    return (
+      <>
+        {errorModalNode}
+        <div className="login-screen">
+          <div className="login-card">
+            <span className="eyebrow">Click Seguros</span>
+            <h1>Iniciar sesión</h1>
+            <p>Ingresa tu correo electrónico para validar acceso a la captura de pólizas.</p>
+            <form className="login-form" onSubmit={handleLogin}>
+              <div className="login-field">
+                <label htmlFor="login-email">Correo electrónico</label>
+                <input
+                  id="login-email"
+                  type="email"
+                  autoComplete="email"
+                  placeholder="nombre@clkseguros.com"
+                  value={loginEmail}
+                  onChange={(event) => setLoginEmail(event.target.value)}
+                  disabled={loginLoading}
+                />
+              </div>
+              <div className="login-actions">
+                <button type="submit" className="primary-button" disabled={loginLoading}>
+                  {loginLoading ? 'Validando...' : 'Entrar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </>
+    );
+  }
+
   if (loading) {
     return (
-      <div className="app-shell loading">
-        <div className="hero-card">
-          <span className="eyebrow">Click Seguros</span>
-          <h1>Captura de Pólizas</h1>
-          <p>Cargando React + MySQL...</p>
+      <>
+        {errorModalNode}
+        <div className="app-shell loading">
+          <div className="hero-card">
+            <span className="eyebrow">Click Seguros</span>
+            <h1>Captura de Pólizas</h1>
+            <p>Cargando React + MySQL...</p>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 
   return (
-    <div className={`app-shell ${isCaptureBlocked ? 'blocked' : ''}`}>
+    <>
+      {errorModalNode}
+      <div className={`app-shell ${isCaptureBlocked ? 'blocked' : ''}`}>
       <header className="topbar">
         <div className="topbar-main">
           <div className="title-row">
             <h1>Captura de Pólizas</h1>
             <span className="version-chip">{publishedVersion}</span>
           </div>
-          <button type="button" className="context-switch" aria-label="Seleccionar unidad">
-            <span>{gerenciaId ? `Gerencia #${gerenciaId}` : 'Gerencia no indicada'}</span>
-            <svg viewBox="0 0 24 24" aria-hidden="true">
-              <path d="M7 10l5 5 5-5" />
-            </svg>
-          </button>
-        </div>
-      </header>
-
-      <Modal
-        open={Boolean(errorModal)}
-        title={errorModal?.title || 'Error'}
-        message={errorModal?.message || ''}
-        tone="danger"
-        onClose={closeErrorModal}
-      />
+            <button type="button" className="context-switch" aria-label="Cerrar sesión" onClick={handleLogout}>
+              <span>
+                {executive?.Ejecutivo ? `Sesión: ${executive.Ejecutivo}` : 'Sesión activa'}
+              </span>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M7 10l5 5 5-5" />
+              </svg>
+            </button>
+          </div>
+        </header>
 
       <main className="app-main">
         <nav className="tabs">
@@ -1576,6 +1685,7 @@ function App() {
 
       </main>
     </div>
+    </>
   );
 }
 
