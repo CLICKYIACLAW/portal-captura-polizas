@@ -52,4 +52,4 @@ npm run build
 
 ## Estado
 
-La versión React + TypeScript + MySQL con el ajuste del tab `Alta de asegurados` a todo el ancho quedó publicada como `v0.0.21`.
+La versión React + TypeScript + MySQL con el ajuste para mostrar `Línea de negocio` y `Gerencia` en el tab `Captura` quedó publicada como `v0.0.22`.

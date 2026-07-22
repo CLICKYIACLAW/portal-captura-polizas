@@ -463,7 +463,7 @@ function App() {
   const ramoLabels = computeRamoLabels(captureSchema);
   const captureFiles = capture.files || [];
   const polizaFiles = captureFiles.filter((file) => file.cat === 'poliza');
-  const showCaptureContextCombos = false;
+  const showCaptureContextCombos = true;
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
