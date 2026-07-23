@@ -8,10 +8,8 @@ import {
   createLog,
   createPoliza,
   downloadAttachmentUrl,
-  loadAsegurados,
   loadRamos,
-  loadSubramos,
-  loadVendedores
+  loadSubramos
 } from './lib/api';
 import {
   countFilled,
@@ -427,12 +425,8 @@ function App() {
   const [alta, setAlta] = useState(emptyAlta());
   const [altaReturnToCapture, setAltaReturnToCapture] = useState(false);
   const [bootVersion, setBootVersion] = useState('React + MySQL');
-  const [vendorCatalog, setVendorCatalog] = useState([]);
-  const [insuredCatalog, setInsuredCatalog] = useState([]);
   const [ramoCatalog, setRamoCatalog] = useState([]);
   const [subramoCatalog, setSubramoCatalog] = useState([]);
-  const [vendorsLoading, setVendorsLoading] = useState(false);
-  const [insuredLoading, setInsuredLoading] = useState(false);
   const [ramosLoading, setRamosLoading] = useState(false);
   const [subramosLoading, setSubramosLoading] = useState(false);
 
@@ -450,8 +444,6 @@ function App() {
   const sections = catalogs.sections || [];
   const lineOptions = catalogs.lineas || [];
   const gerenciaOptions = catalogs.gerencias?.[capture.linea] || [];
-  const vendedorOptions = vendorCatalog;
-  const aseguradoOptions = insuredCatalog;
   const ramoOptions = ramoCatalog;
   const subramoOptions = subramoCatalog;
   const normalizedRamoOptions = useMemo(
@@ -530,12 +522,8 @@ function App() {
   useEffect(() => {
     if (!executive) return undefined;
     let mounted = true;
-    setVendorCatalog([]);
-    setInsuredCatalog([]);
     setRamoCatalog([]);
     setSubramoCatalog([]);
-    setVendorsLoading(true);
-    setInsuredLoading(true);
     setRamosLoading(true);
     setSubramosLoading(false);
     bootstrapApp()
@@ -544,47 +532,27 @@ function App() {
         setBoot(payload);
         setBootVersion(`MySQL ${payload?.catalogs ? 'listo' : ''}`.trim());
         setCapture(emptyCapture(payload?.catalogs?.fields?.length || 0));
-        return Promise.allSettled([loadVendedores(), loadRamos()]).then(([vendorsResult, ramosResult]) => {
+        return loadRamos().then((ramosResult) => {
           if (!mounted) return;
 
-          if (vendorsResult.status === 'fulfilled' && vendorsResult.value?.vendedores) {
-            setVendorCatalog(vendorsResult.value.vendedores);
-          } else {
-            setVendorCatalog([]);
-            const vendorReason =
-              vendorsResult.status === 'rejected' ? vendorsResult.reason : 'No se pudieron cargar los vendedores';
-            const vendorMessage =
-              vendorReason instanceof Error ? vendorReason.message : String(vendorReason || 'No se pudieron cargar los vendedores');
-            openErrorModal('Error al cargar vendedores', vendorMessage);
-          }
-
-          if (ramosResult.status === 'fulfilled' && ramosResult.value?.ramos) {
-            setRamoCatalog(ramosResult.value.ramos);
+          if (ramosResult?.ramos) {
+            setRamoCatalog(ramosResult.ramos);
           } else {
             setRamoCatalog([]);
-            const ramoReason = ramosResult.status === 'rejected' ? ramosResult.reason : 'No se pudieron cargar los ramos';
-            const ramoMessage =
-              ramoReason instanceof Error ? ramoReason.message : String(ramoReason || 'No se pudieron cargar los ramos');
-            openErrorModal('Error al cargar ramos', ramoMessage);
+            openErrorModal('Error al cargar ramos', 'No se pudieron cargar los ramos');
           }
 
-          setVendorsLoading(false);
           setRamosLoading(false);
-          setInsuredLoading(false);
           setLoading(false);
         });
       })
       .catch((fetchError) => {
         if (!mounted) return;
-        setVendorCatalog([]);
-        setInsuredCatalog([]);
         setRamoCatalog([]);
         setSubramoCatalog([]);
-        setVendorsLoading(false);
-        setInsuredLoading(false);
         setRamosLoading(false);
         setSubramosLoading(false);
-        openErrorModal('Error de arranque', fetchError.message || 'No se pudo cargar el bootstrap o la lista de vendedores');
+        openErrorModal('Error de arranque', fetchError.message || 'No se pudo cargar el bootstrap');
         setLoading(false);
       });
     return () => {
@@ -600,40 +568,6 @@ function App() {
       }));
     }
   }, [fields.length]);
-
-  useEffect(() => {
-    let mounted = true;
-    const idVendedor = String(capture.vendedor || '').trim();
-    if (!idVendedor) {
-      setInsuredCatalog([]);
-      setInsuredLoading(false);
-      return undefined;
-    }
-
-    setInsuredLoading(true);
-    loadAsegurados(idVendedor)
-      .then((payload) => {
-        if (!mounted) return;
-        if (payload?.asegurados) {
-          setInsuredCatalog(payload.asegurados);
-        } else {
-          setInsuredCatalog([]);
-        }
-      })
-      .catch((insuredError) => {
-        if (!mounted) return;
-        setInsuredCatalog([]);
-        openErrorModal('Error al cargar asegurados', insuredError.message || 'No se pudieron cargar los asegurados');
-      })
-      .finally(() => {
-        if (!mounted) return;
-        setInsuredLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [capture.vendedor]);
 
   useEffect(() => {
     let mounted = true;
@@ -1250,10 +1184,10 @@ function App() {
               <ComboField
                 label="Vendedor"
                 value={capture.vendedor}
-                options={vendedorOptions}
+                options={[]}
                 placeholder="Selecciona el vendedor"
-                hint={vendorsLoading ? 'Cargando vendedores...' : `${vendedorOptions.length} opciones`}
-                disabled={vendorsLoading || !vendedorOptions.length}
+                hint="Sin carga de datos por ahora"
+                disabled
                 onSelect={(value) =>
                   setCapture((current) => ({
                     ...current,
@@ -1265,10 +1199,10 @@ function App() {
               <ComboField
                 label="Asegurado"
                 value={capture.asegurado}
-                options={aseguradoOptions}
+                options={[]}
                 placeholder="Escribe para buscar al asegurado"
-                hint={insuredLoading ? 'Cargando asegurados...' : `${aseguradoOptions.length} opciones`}
-                disabled={!capture.vendedor || insuredLoading}
+                hint="Sin carga de datos por ahora"
+                disabled
                 onSelect={(value) =>
                   setCapture((current) => ({
                     ...current,
@@ -1478,10 +1412,10 @@ function App() {
               <ComboField
                 label="Vendedor"
                 value={alta.vendedor}
-                options={vendedorOptions}
+                options={[]}
                 placeholder="Selecciona el vendedor"
-                hint={vendorsLoading ? 'Cargando vendedores...' : `${vendedorOptions.length} opciones`}
-                disabled={!alta.gerencia || vendorsLoading}
+                hint="Sin carga de datos por ahora"
+                disabled
                 onSelect={(value) => setAlta((current) => ({ ...current, vendedor: value }))}
               />
               <ComboField

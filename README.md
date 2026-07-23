@@ -52,4 +52,4 @@ npm run build
 
 ## Estado
 
-La versión React + TypeScript + MySQL con el header `id: ClickIA` en `Buscar_Ejecutivos` y `auth_token_bi` desde `AutorizaId/Token/generar` quedó publicada como `v0.0.32`.
+La versión React + TypeScript + MySQL con el header `id: ClickIA` en `Buscar_Ejecutivos` y `auth_token_bi` desde `AutorizaId/Token/generar` quedó publicada como `v0.0.33`.

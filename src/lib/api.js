@@ -43,18 +43,6 @@ export function bootstrapApp() {
   return fetchJson(`${API_URL}?action=bootstrap`);
 }
 
-export function loadVendedores() {
-  return fetchJson(`${API_URL}?action=vendedores.list`);
-}
-
-export function loadAsegurados(idVendedor) {
-  const params = new URLSearchParams({ action: 'asegurados.list' });
-  if (idVendedor) {
-    params.set('idvendedor', idVendedor);
-  }
-  return fetchJson(`${API_URL}?${params.toString()}`);
-}
-
 export function loadRamos() {
   const params = new URLSearchParams({ action: 'ramos.list' });
   return fetchJson(`${API_URL}?${params.toString()}`);
