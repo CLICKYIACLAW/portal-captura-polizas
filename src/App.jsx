@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import appPackage from '../package.json';
 import {
   buscarEjecutivos,
-  bootstrapApp,
   createAsegurado,
   createGrupo,
   createLog,
@@ -11,6 +10,7 @@ import {
   loadRamos,
   loadSubramos
 } from './lib/api';
+import legacyBootstrap from '../storage/bootstrap.json';
 import {
   countFilled,
   fileToBase64,
@@ -49,6 +49,11 @@ const EMPTY_BOOT = {
     grupos: [],
     log: []
   }
+};
+
+const LOCAL_BOOT = {
+  catalogs: legacyBootstrap.catalogs || EMPTY_BOOT.catalogs,
+  records: legacyBootstrap.records || EMPTY_BOOT.records
 };
 
 function emptyCapture(length = 0) {
@@ -417,14 +422,14 @@ function App() {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('captura');
-  const [boot, setBoot] = useState(EMPTY_BOOT);
+  const [boot, setBoot] = useState(LOCAL_BOOT);
   const [loading, setLoading] = useState(() => Boolean(executive));
   const [errorModal, setErrorModal] = useState(null);
   const [toast, setToast] = useState('');
   const [capture, setCapture] = useState(emptyCapture());
   const [alta, setAlta] = useState(emptyAlta());
   const [altaReturnToCapture, setAltaReturnToCapture] = useState(false);
-  const [bootVersion, setBootVersion] = useState('React + MySQL');
+  const [bootVersion, setBootVersion] = useState('React + MySQL · seed local');
   const [ramoCatalog, setRamoCatalog] = useState([]);
   const [subramoCatalog, setSubramoCatalog] = useState([]);
   const [ramosLoading, setRamosLoading] = useState(false);
@@ -436,6 +441,22 @@ function App() {
 
   function closeErrorModal() {
     setErrorModal(null);
+  }
+
+  function appendBootRecord(bucket, record) {
+    if (!record) return;
+    setBoot((current) => {
+      const currentRecords = current.records || EMPTY_BOOT.records;
+      const existing = Array.isArray(currentRecords[bucket]) ? currentRecords[bucket] : [];
+      const next = existing.filter((item) => item && item.id !== record.id);
+      return {
+        ...current,
+        records: {
+          ...currentRecords,
+          [bucket]: [record, ...next]
+        }
+      };
+    });
   }
 
   const catalogs = boot.catalogs || EMPTY_BOOT.catalogs;
@@ -522,38 +543,35 @@ function App() {
   useEffect(() => {
     if (!executive) return undefined;
     let mounted = true;
+    setBoot(LOCAL_BOOT);
+    setBootVersion('React + MySQL · seed local');
+    setCapture(emptyCapture(LOCAL_BOOT?.catalogs?.fields?.length || 0));
     setRamoCatalog([]);
     setSubramoCatalog([]);
     setRamosLoading(true);
     setSubramosLoading(false);
-    bootstrapApp()
-      .then((payload) => {
+    loadRamos()
+      .then((ramosResult) => {
         if (!mounted) return;
-        setBoot(payload);
-        setBootVersion(`MySQL ${payload?.catalogs ? 'listo' : ''}`.trim());
-        setCapture(emptyCapture(payload?.catalogs?.fields?.length || 0));
-        return loadRamos().then((ramosResult) => {
-          if (!mounted) return;
-
-          if (ramosResult?.ramos) {
-            setRamoCatalog(ramosResult.ramos);
-          } else {
-            setRamoCatalog([]);
-            openErrorModal('Error al cargar ramos', 'No se pudieron cargar los ramos');
-          }
-
-          setRamosLoading(false);
-          setLoading(false);
-        });
+        if (ramosResult?.ramos) {
+          setRamoCatalog(ramosResult.ramos);
+        } else {
+          setRamoCatalog([]);
+          openErrorModal('Error al cargar ramos', 'No se pudieron cargar los ramos');
+        }
+        setLoading(false);
       })
       .catch((fetchError) => {
         if (!mounted) return;
         setRamoCatalog([]);
         setSubramoCatalog([]);
+        openErrorModal('Error de arranque', fetchError.message || 'No se pudieron cargar los ramos');
+        setLoading(false);
+      })
+      .finally(() => {
+        if (!mounted) return;
         setRamosLoading(false);
         setSubramosLoading(false);
-        openErrorModal('Error de arranque', fetchError.message || 'No se pudo cargar el bootstrap');
-        setLoading(false);
       });
     return () => {
       mounted = false;
@@ -754,16 +772,6 @@ function App() {
     pushToast('Completa el alta y volverás a la captura');
   }
 
-  async function loadAgain() {
-    try {
-      const payload = await bootstrapApp();
-      setBoot(payload);
-      setBootVersion(`MySQL ${payload?.catalogs ? 'listo' : ''}`.trim());
-    } catch (fetchError) {
-      openErrorModal('Error de arranque', fetchError.message || 'No se pudo recargar el bootstrap');
-    }
-  }
-
   async function callAnthropic(content) {
     let apiKey = localStorage.getItem('clk-api-key');
     if (!apiKey) {
@@ -889,9 +897,14 @@ function App() {
       evento: 'Lectura de póliza',
       detalle: `${file.name} · ${capture.ramo || 'sin ramo'}`
     });
+    appendBootRecord('log', {
+      id: `L${Date.now()}`,
+      ts: Date.now(),
+      evento: 'Lectura de póliza',
+      detalle: `${file.name} · ${capture.ramo || 'sin ramo'}`
+    });
 
     pushToast('Lectura asistida completada');
-    await loadAgain();
   }
 
   async function savePoliza() {
@@ -914,7 +927,7 @@ function App() {
     );
 
     try {
-      await createPoliza({
+      const payload = await createPoliza({
         linea: capture.linea,
         gerencia: capture.gerencia,
         vendedor: capture.vendedor,
@@ -929,6 +942,15 @@ function App() {
         files,
         noGuardados: []
       });
+      appendBootRecord('polizas', payload?.record);
+      appendBootRecord('log', {
+        id: `L${Date.now()}`,
+        ts: Date.now(),
+        evento: 'Póliza registrada',
+        detalle: [capture.aseguradora, capture.poliza, capture.asegurado, capture.linea, capture.gerencia, capture.vendedor, capture.ramo]
+          .filter(Boolean)
+          .join(' · ')
+      });
     } catch (saveError) {
       openErrorModal('Error al guardar póliza', saveError.message || 'No se pudo guardar la póliza.');
       return;
@@ -936,7 +958,6 @@ function App() {
 
     pushToast('Póliza guardada en SQL');
     resetCapture();
-    await loadAgain();
   }
 
   async function saveAlta() {
@@ -981,7 +1002,14 @@ function App() {
     };
 
     try {
-      await createAsegurado(payload);
+      const result = await createAsegurado(payload);
+      appendBootRecord('asegurados', result?.record);
+      appendBootRecord('log', {
+        id: `L${Date.now()}`,
+        ts: Date.now(),
+        evento: 'Asegurado dado de alta',
+        detalle: `${nombre} → ${alta.vendedor} (${alta.gerencia}, ${alta.linea})`
+      });
     } catch (saveError) {
       openErrorModal('Error al guardar asegurado', saveError.message || 'No se pudo guardar el asegurado.');
       return;
@@ -989,12 +1017,13 @@ function App() {
     pushToast('Asegurado dado de alta');
     if (alta.grupo) {
       try {
-        await createGrupo({
+        const result = await createGrupo({
           nombre: alta.grupo,
           linea: alta.linea,
           gerencia: alta.gerencia,
           vendedor: alta.vendedor
         });
+        appendBootRecord('grupos', result?.record);
       } catch (groupError) {
         openErrorModal('Error al guardar grupo', groupError.message || 'No se pudo guardar el grupo.');
         return;
@@ -1011,7 +1040,6 @@ function App() {
     }
 
     setAlta(emptyAlta());
-    await loadAgain();
   }
 
   async function createGroupFromAlta(name) {
@@ -1021,19 +1049,19 @@ function App() {
       return;
     }
     try {
-      await createGrupo({
+      const result = await createGrupo({
         nombre: grupo,
         linea: alta.linea,
         gerencia: alta.gerencia,
         vendedor: alta.vendedor
       });
+      appendBootRecord('grupos', result?.record);
     } catch (groupError) {
       openErrorModal('Error al guardar grupo', groupError.message || 'No se pudo guardar el grupo.');
       return;
     }
     setAlta((current) => ({ ...current, grupo }));
     pushToast(`Grupo ${grupo} listo`);
-    await loadAgain();
   }
 
   const captureMatchClass = `status-chip ${matchResult.tone}`;

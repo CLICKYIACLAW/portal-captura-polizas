@@ -11,8 +11,7 @@ import {
   fetchBiRamos,
   fetchBiSubramos,
   fetchBiVendedores,
-  getAttachmentResponse,
-  handleBootstrap
+  getAttachmentResponse
 } from './bootstrap.js';
 
 const port = Number(process.env.PORT || 3001);
@@ -64,15 +63,9 @@ async function readJsonBody(req: http.IncomingMessage): Promise<Record<string, u
 async function route(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
   const method = req.method || 'GET';
   const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
-  const action = url.searchParams.get('action') || 'bootstrap';
+  const action = url.searchParams.get('action') || '';
 
   try {
-    if (method === 'GET' && action === 'bootstrap') {
-      const payload = await handleBootstrap();
-      sendJson(res, 200, payload);
-      return;
-    }
-
     if (method === 'GET' && action === 'vendedores.list') {
       const vendedores = await fetchBiVendedores();
       sendJson(res, 200, { ok: true, vendedores });

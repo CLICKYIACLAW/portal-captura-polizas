@@ -39,10 +39,6 @@ export async function fetchBiAuthToken() {
   return biAuthTokenPromise;
 }
 
-export function bootstrapApp() {
-  return fetchJson(`${API_URL}?action=bootstrap`);
-}
-
 export function loadRamos() {
   const params = new URLSearchParams({ action: 'ramos.list' });
   return fetchJson(`${API_URL}?${params.toString()}`);

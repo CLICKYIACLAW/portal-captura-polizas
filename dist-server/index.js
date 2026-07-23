@@ -1,7 +1,7 @@
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import http from 'node:http';
-import { bootstrapDatabase, createAsegurado, createGrupo, createLog, createPoliza, fetchBiAsegurados, fetchBiRamos, fetchBiSubramos, fetchBiVendedores, getAttachmentResponse, handleBootstrap } from './bootstrap.js';
+import { bootstrapDatabase, createAsegurado, createGrupo, createLog, createPoliza, fetchBiAsegurados, fetchBiRamos, fetchBiSubramos, fetchBiVendedores, getAttachmentResponse } from './bootstrap.js';
 const port = Number(process.env.PORT || 3001);
 const host = process.env.HOST || '127.0.0.1';
 function sendJson(res, status, payload) {
@@ -44,13 +44,8 @@ async function readJsonBody(req) {
 async function route(req, res) {
     const method = req.method || 'GET';
     const url = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
-    const action = url.searchParams.get('action') || 'bootstrap';
+    const action = url.searchParams.get('action') || '';
     try {
-        if (method === 'GET' && action === 'bootstrap') {
-            const payload = await handleBootstrap();
-            sendJson(res, 200, payload);
-            return;
-        }
         if (method === 'GET' && action === 'vendedores.list') {
             const vendedores = await fetchBiVendedores();
             sendJson(res, 200, { ok: true, vendedores });

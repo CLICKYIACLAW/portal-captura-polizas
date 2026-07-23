@@ -10,7 +10,7 @@ Portal de Click Seguros migrado a **React + TypeScript + MySQL** para capturar, 
   - Pólizas
   - Bitácora
 - Persistencia real en MySQL.
-- API en TypeScript para bootstrap y CRUD básico.
+- API en TypeScript para CRUD básico.
 - Catálogos legados importados desde el monolito original.
 - Carga de archivos para pólizas y descarga desde el registro SQL.
 - Lectura asistida con Anthropic desde el navegador cuando se captura una póliza.
@@ -21,7 +21,7 @@ Portal de Click Seguros migrado a **React + TypeScript + MySQL** para capturar, 
 - `src/`: interfaz, componentes y estilos.
 - `server/src/`: API TypeScript que habla con MySQL.
 - `scripts/seed-legacy.mjs`: genera la semilla SQL desde el legado.
-- `legacy/index-monolith.html`: copia del portal anterior para bootstrap/migración.
+- `legacy/index-monolith.html`: copia del portal anterior para migración.
 - `storage/`: semilla, archivos generados en ejecución y caché temporal del arranque.
 
 ## Desarrollo
@@ -42,7 +42,7 @@ La API TypeScript lee estas variables de entorno:
 - `MYSQL_PASSWORD` o `DB_PASS`
 - `MYSQL_SOCKET` o `DB_SOCKET` opcional
 
-El backend corre en Node/TypeScript y expone la API pública en `/api`, reenviada por Apache hacia ese servicio.
+El backend corre en Node/TypeScript y expone la API pública en `/api`, reenviada por Apache hacia ese servicio. Ya no se expone el endpoint `?action=bootstrap`; la app carga su seed local al iniciar sesión.
 
 ## Build
 
@@ -52,4 +52,4 @@ npm run build
 
 ## Estado
 
-La versión React + TypeScript + MySQL con el header `id: ClickIA` en `Buscar_Ejecutivos` y `auth_token_bi` desde `AutorizaId/Token/generar` quedó publicada como `v0.0.33`.
+La versión React + TypeScript + MySQL con el header `id: ClickIA` en `Buscar_Ejecutivos` y `auth_token_bi` desde `AutorizaId/Token/generar` quedó publicada como `v0.0.34`.
