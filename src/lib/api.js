@@ -5,33 +5,10 @@ const BI_CLIENT_ID = 'ClickIA';
 const BI_AUTH_TOKEN_URL = 'https://ws.developmentservices.com.mx/BIFranquicias/AutorizaId/Token/generar';
 const BI_EXECUTIVES_URL = 'https://ws.developmentservices.com.mx/BIFranquicias/Sicas/Generar/Buscar_Ejecutivos';
 const BI_EXECUTIVES_TOKEN = '6Vqe/9+YKj+mUmDapL5lTvgoEQyh10DW2rWuX2YzJSlMjuFL9jeRc8Hrs1k5yWfA986nayzTIyw8biLU/8C93big9fQx3dMXj8NwUock98CydCTvciSpuqo2EFLEe7/6';
-const BI_AUTH_TOKEN_CACHE_KEY = 'captura-polizas.bi-auth-token.v1';
 
 let biAuthTokenPromise = null;
 
-async function readBiAuthTokenCache() {
-  try {
-    const cached = window.sessionStorage.getItem(BI_AUTH_TOKEN_CACHE_KEY);
-    return cached ? JSON.parse(cached) : null;
-  } catch {
-    return null;
-  }
-}
-
-async function writeBiAuthTokenCache(token) {
-  try {
-    window.sessionStorage.setItem(BI_AUTH_TOKEN_CACHE_KEY, JSON.stringify(token));
-  } catch {
-    // Ignore storage failures and keep the token in memory only.
-  }
-}
-
 export async function fetchBiAuthToken() {
-  const cached = await readBiAuthTokenCache();
-  if (cached && typeof cached === 'string' && cached.trim()) {
-    return cached.trim();
-  }
-
   if (!biAuthTokenPromise) {
     biAuthTokenPromise = (async () => {
       const auth_token_bi_payload = { Id: BI_CLIENT_ID };
@@ -53,9 +30,7 @@ export async function fetchBiAuthToken() {
         throw new Error('La API de token no devolvió ATkn');
       }
 
-      const normalized = token.trim();
-      await writeBiAuthTokenCache(normalized);
-      return normalized;
+      return token.trim();
     })().finally(() => {
       biAuthTokenPromise = null;
     });
