@@ -8,7 +8,6 @@ import {
   createLog,
   createPoliza,
   fetchBiAsegurados,
-  fetchBiRamos,
   fetchBiSubramos,
   fetchBiVendedores,
   getAttachmentResponse
@@ -81,12 +80,6 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse): Promi
 
       const asegurados = await fetchBiAsegurados(idVendedor);
       sendJson(res, 200, { ok: true, asegurados });
-      return;
-    }
-
-    if (method === 'GET' && action === 'ramos.list') {
-      const ramos = await fetchBiRamos();
-      sendJson(res, 200, { ok: true, ramos });
       return;
     }
 

@@ -4,7 +4,9 @@ const API_URL = '/api';
 const BI_CLIENT_ID = 'ClickIA';
 const BI_AUTH_TOKEN_URL = 'https://ws.developmentservices.com.mx/BIFranquicias/AutorizaId/Token/generar';
 const BI_EXECUTIVES_URL = 'https://ws.developmentservices.com.mx/BIFranquicias/Sicas/Generar/Buscar_Ejecutivos';
+const BI_RAMOS_URL = 'https://ws.developmentservices.com.mx/BIFranquicias/Sicas/Generar/CKIA_Captura_Trae_Ramos';
 const BI_EXECUTIVES_TOKEN = '6Vqe/9+YKj+mUmDapL5lTvgoEQyh10DW2rWuX2YzJSlMjuFL9jeRc8Hrs1k5yWfA986nayzTIyw8biLU/8C93big9fQx3dMXj8NwUock98CydCTvciSpuqo2EFLEe7/6';
+const BI_RAMOS_TOKEN = '6Vqe/9+YKj+mUmDapL5lTvgoEQyh10DW2rWuX2YzJSlMjuFL9jeRc8Hrs1k5yWfA986nayzTIyw8biLU/8C93big9fQx3dMXj8NwUock98CydCTvciSpuqo2EFLEe7/6';
 
 let biAuthTokenPromise = null;
 
@@ -39,9 +41,41 @@ export async function fetchBiAuthToken() {
   return biAuthTokenPromise;
 }
 
-export function loadRamos() {
-  const params = new URLSearchParams({ action: 'ramos.list' });
-  return fetchJson(`${API_URL}?${params.toString()}`);
+function mapBiListResponse(payload, fallbackKey) {
+  const rawItems = Array.isArray(payload?.Valores) ? payload.Valores : [];
+  return {
+    ok: true,
+    [fallbackKey]: rawItems
+      .map((item) => ({
+        Texto: String(item?.Texto ?? '').trim(),
+        Valor: String(item?.Valor ?? '').trim()
+      }))
+      .filter((item) => item.Texto && item.Valor)
+  };
+}
+
+export async function loadRamos() {
+  const auth_token_bi = await fetchBiAuthToken();
+  const response = await fetch(BI_RAMOS_URL, {
+    method: 'POST',
+    headers: {
+      Authorization: `FId ${auth_token_bi}`,
+      token: BI_RAMOS_TOKEN,
+      id: 'ClickIA',
+      'Content-Type': 'application/json'
+    },
+    redirect: 'follow'
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    throw new Error(payload?.MError || payload?.Message || `Error HTTP ${response.status}`);
+  }
+  if (payload?.Respuesta === false) {
+    throw new Error(payload?.MError || 'La API de ramos no devolvió resultados');
+  }
+
+  return mapBiListResponse(payload, 'ramos');
 }
 
 export async function buscarEjecutivos(busqueda) {
