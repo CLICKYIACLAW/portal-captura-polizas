@@ -13,6 +13,12 @@ import {
   loadVendedores,
   loadSubramos
 } from './lib/api';
+import {
+  POLIZA_ASEGURADO_INDEX,
+  POLIZA_LAYOUT_FIELDS,
+  POLIZA_LAYOUT_INDEX_BY_KEY,
+  POLIZA_LAYOUT_SECTIONS
+} from './lib/polizaLayout';
 import legacyBootstrap from '../storage/bootstrap.json';
 import {
   countFilled,
@@ -59,7 +65,7 @@ const LOCAL_BOOT = {
   records: legacyBootstrap.records || EMPTY_BOOT.records
 };
 
-function emptyCapture(length = 0) {
+function emptyCapture(length = POLIZA_LAYOUT_FIELDS.length) {
   return {
     linea: '',
     gerencia: '',
@@ -73,7 +79,8 @@ function emptyCapture(length = 0) {
     layout: Array(length).fill(''),
     ramoData: {},
     files: [],
-    extracted: false
+    extracted: false,
+    confirmed: false
   };
 }
 
@@ -529,24 +536,26 @@ function formatSummaryCurrency(value) {
   })}`;
 }
 
-function buildAnthropicPrompt(fields, ramoFields, ramoLabel, subramoLabel) {
-  const layoutGuide = fields.map((field, index) => `${index}. ${field.d || field.k}`).join('\n');
-  const ramoGuide = ramoFields
-    .map(([key, label, description]) => `- ${key}: ${[label, description].filter(Boolean).join(' · ')}`)
-    .join('\n');
+function buildAnthropicPrompt(fields, sections, ramoLabel, subramoLabel) {
+  const layoutGuide = sections
+    .map(([section, start, end]) => {
+      const sectionFields = fields.slice(start, end + 1).map((field) => `- ${field.d || field.k}`).join('\n');
+      return `${section}:\n${sectionFields}`;
+    })
+    .join('\n\n');
 
   return [
     'Analiza el documento adjunto de una póliza de seguros mexicana y extrae TODOS los datos que puedas completar en el formulario.',
     'Responde ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones y sin texto adicional.',
     'Cuando un dato no aparezca con claridad, usa null.',
     'No inventes datos.',
+    'Todos los campos del formulario son textos.',
     'Conserva números, montos, referencias y póliza exactamente como aparezcan en el documento.',
     'La estructura debe ser:',
     '{',
     '  "aseguradora": string | null,',
     '  "poliza": string | null,',
     '  "layout": Array<string | null> con exactamente la misma cantidad de campos del formulario,',
-    '  "ramoData": { [campo]: string | null },',
     '  "resumenPrimas": {',
     '    "prima_neta": string | null,',
     '    "tasa_financiamiento": string | null,',
@@ -564,16 +573,14 @@ function buildAnthropicPrompt(fields, ramoFields, ramoLabel, subramoLabel) {
     '}',
     `Ramo seleccionado: ${ramoLabel || 'sin ramo'}`,
     `Subramo seleccionado: ${subramoLabel || 'sin subramo'}`,
-    'Campos del formulario, en este orden exacto:',
+    'Campos del formulario agrupados por sección, en este orden exacto:',
     layoutGuide || '- (sin campos)',
-    ramoFields.length ? 'Campos específicos del ramo:' : 'Campos específicos del ramo: ninguno',
-    ramoGuide || '- ninguno',
     'Resumen de primas: identifica y extrae todos los importes y conceptos visibles. Incluye al menos prima neta, tasa de financiamiento, gastos por expedición, descuentos, subtotal, I.V.A., importe total y cualquier otro recargo, derecho o ajuste que aparezca.',
     'Devuelve los datos listos para llenar la captura.'
   ].join('\n');
 }
 
-async function callAnthropic(file, fields, ramoFields, ramoLabel, subramoLabel) {
+async function callAnthropic(file, fields, sections, ramoLabel, subramoLabel) {
   const apiKey = ensureAnthropicKey();
   if (!apiKey) {
     throw new Error('Se requiere la clave de API de Anthropic para leer la póliza.');
@@ -582,7 +589,7 @@ async function callAnthropic(file, fields, ramoFields, ramoLabel, subramoLabel) 
   const fileData = await fileToBase64(file);
   const content = [
     buildAnthropicDocumentBlock(file, fileData),
-    { type: 'text', text: buildAnthropicPrompt(fields, ramoFields, ramoLabel, subramoLabel) }
+    { type: 'text', text: buildAnthropicPrompt(fields, sections, ramoLabel, subramoLabel) }
   ];
 
   const response = await fetch(ANTHROPIC_API_URL, {
@@ -716,8 +723,6 @@ function App() {
 
   const catalogs = boot.catalogs || EMPTY_BOOT.catalogs;
   const records = boot.records || EMPTY_BOOT.records;
-  const fields = catalogs.fields || [];
-  const sections = catalogs.sections || [];
   const lineOptions = catalogs.lineas || [];
   const gerenciaOptions = catalogs.gerencias?.[capture.linea] || [];
   const ramoOptions = ramoCatalog;
@@ -748,8 +753,6 @@ function App() {
   const selectedSubramoLabel = selectedSubramoOption?.label || String(capture.subramo || '');
   const selectedAseguradoLabel = selectedAseguradoOption?.label || String(capture.asegurado || '');
   const showSubramo = normalizeKey(selectedRamoLabel) === normalizeKey('Daños');
-  const captureSchema = getRamoSchema(catalogs, selectedRamoLabel, selectedSubramoLabel);
-  const ramoLabels = computeRamoLabels(captureSchema);
   const captureLocked = readingDocument;
   const captureFiles = capture.files || [];
   const polizaFiles = captureFiles.filter((file) => file.cat === 'poliza');
@@ -822,7 +825,7 @@ function App() {
     let mounted = true;
     setBoot(LOCAL_BOOT);
     setBootVersion('React + MySQL · seed local');
-    setCapture(emptyCapture(LOCAL_BOOT?.catalogs?.fields?.length || 0));
+    setCapture(emptyCapture());
     setRamoCatalog([]);
     setSubramoCatalog([]);
     setVendedorCatalog([]);
@@ -869,13 +872,13 @@ function App() {
   }, [executive]);
 
   useEffect(() => {
-    if (fields.length && capture.layout.length !== fields.length) {
+    if (capture.layout.length !== POLIZA_LAYOUT_FIELDS.length) {
       setCapture((current) => ({
         ...current,
-        layout: Array(fields.length).fill('')
+        layout: Array(POLIZA_LAYOUT_FIELDS.length).fill('')
       }));
     }
-  }, [fields.length]);
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -887,7 +890,8 @@ function App() {
         current.subramo
           ? {
               ...current,
-              subramo: ''
+              subramo: '',
+              confirmed: false
             }
           : current
       );
@@ -936,7 +940,8 @@ function App() {
         current.asegurado
           ? {
               ...current,
-              asegurado: ''
+              asegurado: '',
+              confirmed: false
             }
           : current
       );
@@ -1032,27 +1037,34 @@ function App() {
   const summary = useMemo(() => {
     const layout = capture.layout || [];
     const summaryData = capture.ramoData || {};
-    const subtotalSource = normalizeText(summaryData.subtotal || summaryData.Subtotal);
-    const totalSource = normalizeText(summaryData.importe_total || summaryData.prima_total || summaryData.total);
+    const subtotalSource =
+      normalizeText(summaryData.subtotal || summaryData.Subtotal) ||
+      normalizeText(layout[POLIZA_LAYOUT_INDEX_BY_KEY['DatDocumentos.STotal']] || '');
+    const totalSource =
+      normalizeText(summaryData.importe_total || summaryData.prima_total || summaryData.total) ||
+      normalizeText(layout[POLIZA_LAYOUT_INDEX_BY_KEY['DatDocumentos.PrimaTotal']] || '');
     const subtotal = subtotalSource
       ? Number(subtotalSource.replace(/[$,\s]/g, ''))
-      : Number(String(layout[43] || '').replace(/[$,\s]/g, '')) +
-        Number(String(layout[47] || '').replace(/[$,\s]/g, '')) +
-        Number(String(layout[45] || '').replace(/[$,\s]/g, '')) -
-        Number(String(layout[44] || '').replace(/[$,\s]/g, ''));
+      : Number(String(layout[POLIZA_LAYOUT_INDEX_BY_KEY['DatDocumentos.STotal']] || '').replace(/[$,\s]/g, ''));
     const total = totalSource
       ? Number(totalSource.replace(/[$,\s]/g, ''))
-      : Number(String(layout[48] || '').replace(/[$,\s]/g, ''));
+      : Number(String(layout[POLIZA_LAYOUT_INDEX_BY_KEY['DatDocumentos.PrimaTotal']] || '').replace(/[$,\s]/g, ''));
     return {
       subtotal: Number.isFinite(subtotal) && subtotal !== 0 ? subtotal : null,
       total: Number.isFinite(total) && total !== 0 ? total : null,
-      primaNeta: normalizeText(summaryData.prima_neta || summaryData.primaNeta),
+      primaNeta:
+        normalizeText(summaryData.prima_neta || summaryData.primaNeta) ||
+        normalizeText(layout[POLIZA_LAYOUT_INDEX_BY_KEY['DatDocumentos.PrimaNeta']] || ''),
       tasaFinanciamiento: normalizeText(summaryData.tasa_financiamiento || summaryData.tasaFinanciamiento),
       gastosExpedicion: normalizeText(summaryData.gastos_expedicion || summaryData.gastosExpedicion),
-      descuentos: normalizeText(summaryData.descuentos || summaryData.descuento),
-      iva: normalizeText(summaryData.iva || summaryData.iVA || summaryData.iva_total),
+      descuentos:
+        normalizeText(summaryData.descuentos || summaryData.descuento) ||
+        normalizeText(layout[POLIZA_LAYOUT_INDEX_BY_KEY['DatDocumentos.Descuento']] || ''),
+      iva:
+        normalizeText(summaryData.iva || summaryData.iVA || summaryData.iva_total) ||
+        normalizeText(layout[POLIZA_LAYOUT_INDEX_BY_KEY['DatDocumentos.Impuesto1']] || ''),
       recargos: normalizeText(summaryData.recargos || summaryData.recargo),
-      derechos: normalizeText(summaryData.derechos),
+      derechos: normalizeText(summaryData.derechos) || normalizeText(layout[POLIZA_LAYOUT_INDEX_BY_KEY['DatDocumentos.Derechos']] || ''),
       ajuste: normalizeText(summaryData.ajuste),
       otrosCargos: normalizeText(summaryData.otros_cargos || summaryData.otrosCargos)
     };
@@ -1061,6 +1073,8 @@ function App() {
   const matchResult = useMemo(() => {
     if (!capture.extracted) return { tone: 'neutral', message: 'Aún no se ejecuta lectura asistida.' };
     const candidate =
+      normalizeText(capture.layout[POLIZA_ASEGURADO_INDEX]) ||
+      [capture.layout[POLIZA_ASEGURADO_INDEX + 1], capture.layout[POLIZA_ASEGURADO_INDEX - 1]].filter(Boolean).join(' ') ||
       [capture.layout[19], capture.layout[18], capture.layout[17]].filter(Boolean).join(' ') ||
       capture.layout[6] ||
       [capture.layout[3], capture.layout[2], capture.layout[1]].filter(Boolean).join(' ');
@@ -1095,18 +1109,18 @@ function App() {
   }
 
   function resetCapture() {
-    setCapture(emptyCapture(fields.length));
+    setCapture(emptyCapture());
   }
 
   function updateCapture(field, value) {
-    setCapture((current) => ({ ...current, [field]: value }));
+    setCapture((current) => ({ ...current, [field]: value, confirmed: false }));
   }
 
   function updateLayout(index, value) {
     setCapture((current) => {
       const next = [...current.layout];
       next[index] = value;
-      return { ...current, layout: next };
+      return { ...current, layout: next, confirmed: false };
     });
   }
 
@@ -1116,7 +1130,8 @@ function App() {
       ramoData: {
         ...(current.ramoData || {}),
         [key]: value
-      }
+      },
+      confirmed: false
     }));
   }
 
@@ -1135,14 +1150,15 @@ function App() {
       }));
       const next = category === 'poliza' ? existing : [...existing, ...bucket];
       const final = category === 'poliza' ? [...next, incoming[0]] : [...next, ...incoming.slice(0, Math.max(0, maxCount - bucket.length))];
-      return { ...current, files: final };
+      return { ...current, files: final, confirmed: false };
     });
   }
 
   function removeFileByRef(targetFile) {
     setCapture((current) => ({
       ...current,
-      files: current.files.filter((file) => file !== targetFile)
+      files: current.files.filter((file) => file !== targetFile),
+      confirmed: false
     }));
   }
 
@@ -1194,27 +1210,14 @@ function App() {
     const file = doc.file;
     setReadingDocument(true);
     pushToast('Leyendo póliza con Anthropic...');
-    const ramoSchema = getRamoSchema(catalogs, capture.ramo, capture.subramo);
-    const ramoFields = ramoSchema ? [...(ramoSchema.main || []), ...(ramoSchema.full || [])] : [];
     try {
-      const result = await callAnthropic(file, fields, ramoFields, capture.ramo, capture.subramo);
-      const nextLayout = Array(fields.length).fill('');
+      const result = await callAnthropic(file, POLIZA_LAYOUT_FIELDS, POLIZA_LAYOUT_SECTIONS, capture.ramo, capture.subramo);
+      const nextLayout = Array(POLIZA_LAYOUT_FIELDS.length).fill('');
       if (Array.isArray(result?.layout)) {
-        result.layout.slice(0, fields.length).forEach((value, index) => {
+        result.layout.slice(0, POLIZA_LAYOUT_FIELDS.length).forEach((value, index) => {
           nextLayout[index] = normalizeText(value);
         });
       }
-      const ramoData =
-        result?.ramoData && typeof result.ramoData === 'object' && !Array.isArray(result.ramoData)
-          ? Object.fromEntries(
-              ramoFields
-                .map(([key]) => {
-                  const value = normalizeText(result.ramoData?.[key]);
-                  return value ? [key, value] : null;
-                })
-                .filter(Boolean)
-            )
-          : {};
       const resumenPrimas = normalizeSummaryValues(result?.resumenPrimas);
 
       setCapture((current) => ({
@@ -1224,10 +1227,10 @@ function App() {
         layout: nextLayout,
         ramoData: {
           ...(current.ramoData || {}),
-          ...ramoData,
           ...resumenPrimas
         },
-        extracted: true
+        extracted: true,
+        confirmed: false
       }));
 
       try {
@@ -1261,6 +1264,10 @@ function App() {
     }
     if (!polizaFiles.length) {
       openErrorModal('Falta archivo', 'Carga al menos la póliza principal.');
+      return;
+    }
+    if (!capture.confirmed) {
+      openErrorModal('Confirma la captura', 'Lee toda la información y marca la confirmación antes de guardar.');
       return;
     }
 
@@ -1546,7 +1553,8 @@ function App() {
                       ramo: '',
                       subramo: '',
                       vendedorId: '',
-                      extracted: false
+                      extracted: false,
+                      confirmed: false
                     }))
                   }
                 />
@@ -1566,7 +1574,8 @@ function App() {
                       vendedor: '',
                       vendedorId: '',
                       asegurado: '',
-                      extracted: false
+                      extracted: false,
+                      confirmed: false
                     }))
                   }
                 />
@@ -1588,7 +1597,8 @@ function App() {
                     vendedor: value,
                     vendedorId: selectedVendor?.IdVendedor ? String(selectedVendor.IdVendedor) : '',
                     asegurado: '',
-                    extracted: false
+                    extracted: false,
+                    confirmed: false
                   }));
                 }}
               />
@@ -1617,7 +1627,8 @@ function App() {
                   setCapture((current) => ({
                     ...current,
                     asegurado: value,
-                    extracted: false
+                    extracted: false,
+                    confirmed: false
                   }))
                 }
                 actionLabel={(query) =>
@@ -1638,7 +1649,8 @@ function App() {
                     ramo: value,
                     subramo: '',
                     ramoData: {},
-                    extracted: false
+                    extracted: false,
+                    confirmed: false
                   }))
                 }
               />
@@ -1654,7 +1666,8 @@ function App() {
                     setCapture((current) => ({
                       ...current,
                       subramo: value,
-                      extracted: false
+                      extracted: false,
+                      confirmed: false
                     }))
                   }
                 />
@@ -1777,47 +1790,23 @@ function App() {
                 <div className="warning-box">Revisa que prima neta, gastos, descuento, IVA, subtotal y total cuadren antes de guardar.</div>
               </Card>
 
-              {captureSchema ? (
-                <Card
-                  title={`Datos del ramo${selectedRamoLabel ? ` · ${selectedRamoLabel}` : ''}${showSubramo && selectedSubramoLabel ? ` / ${selectedSubramoLabel}` : ''}`}
-                  subtitle="Completa la información específica del ramo"
-                >
-                  <div className="ramo-grid">
-                    {(captureSchema.main || []).map(([key, label]) => (
-                      <div className="mini-field" key={`main-${key}`}>
-                        <label>{label}</label>
-                        <input
-                          type="text"
-                          value={capture.ramoData?.[key] || ''}
-                          onChange={(event) => updateRamoData(key, event.target.value)}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                  <div className="ramo-grid full">
-                    {(captureSchema.full || []).map(([key, label]) => (
-                      <div className="mini-field" key={`full-${key}`}>
-                        <label>{label}</label>
-                        <input
-                          type="text"
-                          value={capture.ramoData?.[key] || ''}
-                          onChange={(event) => updateRamoData(key, event.target.value)}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </Card>
-              ) : null}
-
               <Card title="Formulario de póliza" subtitle="Datos extraídos para validar la captura" headAlign="left">
                 <SectionFields
-                  sections={sections}
-                  fields={fields}
+                  sections={POLIZA_LAYOUT_SECTIONS}
+                  fields={POLIZA_LAYOUT_FIELDS}
                   layout={capture.layout}
                   onChange={updateLayout}
                 />
+                <label className="final-confirmation">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(capture.confirmed)}
+                    onChange={(event) => updateCapture('confirmed', event.target.checked)}
+                  />
+                  <span>Confirmo que leí toda la información y estoy de acuerdo en guardar.</span>
+                </label>
                 <div className="actions-row">
-                  <button type="button" className="secondary-button" onClick={savePoliza}>
+                  <button type="button" className="secondary-button" onClick={savePoliza} disabled={!capture.confirmed}>
                     Guardar póliza
                   </button>
                   <button type="button" className="ghost-button" onClick={resetCapture}>

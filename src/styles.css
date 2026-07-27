@@ -589,6 +589,27 @@ a {
   color: #991b1b;
 }
 
+.final-confirmation {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 14px 16px;
+  border-radius: 16px;
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  background: rgba(17, 24, 39, 0.03);
+  color: #374151;
+  line-height: 1.45;
+}
+
+.final-confirmation input {
+  margin-top: 2px;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  accent-color: var(--brand);
+}
+
 .file-grid .dropzone {
   display: grid;
   gap: 8px;
@@ -752,6 +773,15 @@ a {
 .ghost-button:hover,
 .switch:hover {
   transform: translateY(-1px);
+}
+
+.primary-button:disabled,
+.secondary-button:disabled,
+.ghost-button:disabled,
+.switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.56;
+  transform: none;
 }
 
 .type-switch {

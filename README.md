@@ -52,4 +52,4 @@ npm run build
 
 ## Estado
 
-La versión React + TypeScript + MySQL con el header `id: ClickIA` en `Buscar_Ejecutivos`, `auth_token_bi` desde `AutorizaId/Token/generar`, lectura asistida con Anthropic y el ajuste visual de captura y alta de asegurados quedó publicada como `v0.0.46`.
+La versión React + TypeScript + MySQL con el header `id: ClickIA` en `Buscar_Ejecutivos`, `auth_token_bi` desde `AutorizaId/Token/generar`, lectura asistida con Anthropic, el layout de póliza del Excel y la validación final de confirmación quedó publicada como `v0.0.51`.
