@@ -731,13 +731,22 @@ function App() {
     () => (subramoOptions || []).map(getComboOption).filter((option) => option.label || option.value),
     [subramoOptions]
   );
+  const normalizedAseguradoOptions = useMemo(
+    () => (aseguradoCatalog || []).map(getComboOption).filter((option) => option.label || option.value),
+    [aseguradoCatalog]
+  );
   const selectedVendorId = String(capture.vendedorId || '').trim();
   const selectedRamoOption =
     normalizedRamoOptions.find((option) => option.value === String(capture.ramo || '')) || null;
   const selectedSubramoOption =
     normalizedSubramoOptions.find((option) => option.value === String(capture.subramo || '')) || null;
+  const selectedAseguradoOption =
+    normalizedAseguradoOptions.find(
+      (option) => option.value === String(capture.asegurado || '') || option.label === String(capture.asegurado || '')
+    ) || null;
   const selectedRamoLabel = selectedRamoOption?.label || String(capture.ramo || '');
   const selectedSubramoLabel = selectedSubramoOption?.label || String(capture.subramo || '');
+  const selectedAseguradoLabel = selectedAseguradoOption?.label || String(capture.asegurado || '');
   const showSubramo = normalizeKey(selectedRamoLabel) === normalizeKey('Daños');
   const captureSchema = getRamoSchema(catalogs, selectedRamoLabel, selectedSubramoLabel);
   const ramoLabels = computeRamoLabels(captureSchema);
@@ -1069,13 +1078,16 @@ function App() {
       return { tone: 'success', message: `✓ El asegurado coincide con la póliza («${candidate}»).` };
     }
     if (ratio >= 0.5) {
-      return { tone: 'warning', message: `Coincidencia parcial: en la póliza aparece «${candidate}» y elegiste «${capture.asegurado}».` };
+      return {
+        tone: 'warning',
+        message: `Coincidencia parcial: en la póliza aparece «${candidate}» y elegiste «${selectedAseguradoLabel}».`
+      };
     }
     return {
       tone: 'danger',
-      message: `No cuadra: en la póliza aparece «${candidate}» y en la asignación elegiste «${capture.asegurado}».`
+      message: `No cuadra: en la póliza aparece «${candidate}» y en la asignación elegiste «${selectedAseguradoLabel}».`
     };
-  }, [capture]);
+  }, [capture, selectedAseguradoLabel]);
 
   function pushToast(message) {
     setToast(message);
