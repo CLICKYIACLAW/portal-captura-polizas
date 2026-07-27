@@ -545,9 +545,21 @@ a {
 }
 
 .capture-highlight {
-  margin-top: 16px;
   display: grid;
   gap: 12px;
+}
+
+.read-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.read-actions .capture-highlight {
+  flex: 1 1 320px;
+  min-width: 0;
 }
 
 .status-chip {
@@ -556,6 +568,7 @@ a {
   border: 1px solid rgba(17, 24, 39, 0.08);
   background: #fff;
   line-height: 1.5;
+  width: 100%;
 }
 
 .status-chip.success {

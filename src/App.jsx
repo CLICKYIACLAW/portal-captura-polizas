@@ -1649,9 +1649,6 @@ function App() {
               ) : null}
             </div>
 
-            <div className="capture-highlight">
-              <div className={captureMatchClass}>{matchResult.message}</div>
-            </div>
           </Card>
 
           {showDocumentsBlock ? (
@@ -1696,7 +1693,7 @@ function App() {
                   onRemoveFile={removeFileByRef}
                 />
               </div>
-              <div className="actions-row">
+              <div className="read-actions">
                 <button
                   type="button"
                   className="primary-button"
@@ -1705,6 +1702,9 @@ function App() {
                 >
                   {readingDocument ? 'Leyendo...' : 'Leer póliza'}
                 </button>
+                <div className="capture-highlight">
+                  <div className={captureMatchClass}>{matchResult.message}</div>
+                </div>
               </div>
             </Card>
           ) : null}
