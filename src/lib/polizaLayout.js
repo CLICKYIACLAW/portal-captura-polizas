@@ -1,6 +1,5 @@
 const layoutFields = [
   // Póliza
-  { k: 'DatDocumentos.IDDocto', d: 'IDDocto', section: 'Póliza' },
   { k: 'DatDocumentos.TipoDocto', d: 'Tipo Documento', section: 'Póliza' },
   { k: 'DatDocumentos.Documento', d: 'Documento', section: 'Póliza' },
   { k: 'DatDocumentos.IDAgenteNum', d: 'Agente número', section: 'Póliza' },
@@ -14,9 +13,6 @@ const layoutFields = [
   { k: 'DatDocumentos.FAntiguedad', d: 'Fecha de Antigüedad', section: 'Póliza' },
   { k: 'DatDocumentos.FSolicitud', d: 'Solicitud', section: 'Póliza' },
   { k: 'DatDocumentos.Status', d: 'Estatus', section: 'Póliza' },
-  { k: 'DatDocumentos.ClasDocto', d: 'Clasificación Documento', section: 'Póliza' },
-  { k: 'DatDocumentos.TCDocto', d: 'T. de Cambio', section: 'Póliza' },
-  { k: 'DatDocumentos.IDUserC', d: 'Usuario que Capturó', section: 'Póliza' },
 
   // Contratante
   { k: 'DatDocumentos.IDCli', d: 'Cliente', section: 'Contratante' },
@@ -31,20 +27,7 @@ const layoutFields = [
   { k: 'DatDocumentos.IDDirPais', d: 'País', section: 'Contratante' },
   { k: 'DatDocumentos.IDGrupo', d: 'Grupo', section: 'Contratante' },
 
-  // Control
-  { k: 'DatDocumentos.IDEjecut', d: 'Ejecutivo', section: 'Control' },
-  { k: 'DatDocumentos.IDEjecutCob', d: 'Ejecutivo de Cobranza', section: 'Control' },
-  { k: 'DatDocumentos.IDEjecutRec', d: 'Ejecutivo de Reclamo', section: 'Control' },
-  { k: 'DatDocumentos.IDVend', d: 'Vendedor', section: 'Control' },
-  { k: 'DatDocumentos.IDDespacho', d: 'Despacho', section: 'Control' },
-  { k: 'DatDocumentos.IDGerencia', d: 'Gerencia', section: 'Control' },
-  { k: 'DatDocumentos.IDLineBuss', d: 'Línea de Negocio', section: 'Control' },
-  { k: 'DatDocumentos.IDEjecutCia', d: 'Ejecutivo de Compañía', section: 'Control' },
-  { k: 'DatDocumentos.CCobro', d: 'Conducto de Cobro', section: 'Control' },
-  { k: 'DatDocumentos.TVenta', d: 'Tipo de Venta', section: 'Control' },
-
   // Asegurado
-  { k: 'DatDoctoDetail.IDDocto', d: 'Documento ID', section: 'Asegurado' },
   { k: 'DatDoctoDetail.IDAseg', d: 'Nombre', section: 'Asegurado' },
   { k: 'DatDoctoDetail.IDDirCalle', d: 'Calle', section: 'Asegurado' },
   { k: 'DatDoctoDetail.IDDirNumExt', d: 'Num ext.', section: 'Asegurado' },

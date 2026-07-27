@@ -577,6 +577,7 @@ function buildAnthropicPrompt(fields, sections, ramoLabel, subramoLabel) {
     `Subramo seleccionado: ${subramoLabel || 'sin subramo'}`,
     'Campos del formulario agrupados por sección, en este orden exacto:',
     layoutGuide || '- (sin campos)',
+    'El nombre del asegurado debe colocarse en el campo "Nombre" de la sección "Asegurado".',
     'Resumen de primas: identifica y extrae todos los importes y conceptos visibles. Incluye al menos prima neta, tasa de financiamiento, gastos por expedición, descuentos, subtotal, I.V.A., importe total y cualquier otro recargo, derecho o ajuste que aparezca.',
     'Devuelve los datos listos para llenar la captura.'
   ].join('\n');
@@ -754,6 +755,7 @@ function App() {
   const selectedRamoLabel = selectedRamoOption?.label || String(capture.ramo || '');
   const selectedSubramoLabel = selectedSubramoOption?.label || String(capture.subramo || '');
   const selectedAseguradoLabel = selectedAseguradoOption?.label || String(capture.asegurado || '');
+  const extractedAseguradoName = normalizeText(capture.layout[POLIZA_ASEGURADO_INDEX]);
   const showSubramo = normalizeKey(selectedRamoLabel) === normalizeKey('Daños');
   const captureLocked = readingDocument;
   const captureFiles = capture.files || [];
@@ -1059,16 +1061,11 @@ function App() {
 
   const matchResult = useMemo(() => {
     if (!capture.extracted) return { tone: 'neutral', message: 'Aún no se ejecuta lectura asistida.' };
-    const candidate =
-      normalizeText(capture.layout[POLIZA_ASEGURADO_INDEX]) ||
-      [capture.layout[POLIZA_ASEGURADO_INDEX + 1], capture.layout[POLIZA_ASEGURADO_INDEX - 1]].filter(Boolean).join(' ') ||
-      [capture.layout[19], capture.layout[18], capture.layout[17]].filter(Boolean).join(' ') ||
-      capture.layout[6] ||
-      [capture.layout[3], capture.layout[2], capture.layout[1]].filter(Boolean).join(' ');
+    const candidate = extractedAseguradoName;
     if (!candidate || !capture.asegurado) {
-      return { tone: 'neutral', message: 'Captura un asegurado y una póliza para validar coincidencia.' };
+      return { tone: 'neutral', message: 'Captura el nombre del asegurado en la póliza y selecciona un asegurado para validar coincidencia.' };
     }
-    const a = normalizeTokens(capture.asegurado);
+    const a = normalizeTokens(selectedAseguradoLabel);
     const b = normalizeTokens(candidate);
     let intersection = 0;
     a.forEach((token) => {
@@ -1081,14 +1078,14 @@ function App() {
     if (ratio >= 0.5) {
       return {
         tone: 'warning',
-        message: `Coincidencia parcial: en la póliza aparece «${candidate}» y elegiste «${selectedAseguradoLabel}».`
+        message: `Coincidencia parcial: en la póliza aparece «${candidate}» y seleccionaste «${selectedAseguradoLabel}».`
       };
     }
     return {
       tone: 'danger',
-      message: `No cuadra: en la póliza aparece «${candidate}» y en la asignación elegiste «${selectedAseguradoLabel}».`
+      message: `No cuadra: en la póliza aparece «${candidate}» y en Asegurado seleccionaste «${selectedAseguradoLabel}».`
     };
-  }, [capture, selectedAseguradoLabel]);
+  }, [capture, extractedAseguradoName, selectedAseguradoLabel]);
 
   function pushToast(message) {
     setToast(message);
