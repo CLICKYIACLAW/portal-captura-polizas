@@ -1,7 +1,7 @@
 {
   "name": "portal-captura-polizas",
   "private": true,
-  "version": "0.0.35",
+  "version": "0.0.46",
   "type": "module",
   "scripts": {
     "dev": "vite",

@@ -99,8 +99,8 @@ export async function fetchBiAsegurados(idVendedor) {
 export async function fetchBiRamos() {
     return fetchBiList(biRamosUrl, {}, 'ramos');
 }
-export async function fetchBiSubramos(idRamo) {
-    return fetchBiList(biSubRamosUrl, { IdRamo: String(idRamo) }, 'subramos');
+export async function fetchBiSubramos() {
+    return fetchBiList(biSubRamosUrl, { IdRamo: '2' }, 'subramos');
 }
 export async function readSeed() {
     const raw = await readFile(seedPath, 'utf8');

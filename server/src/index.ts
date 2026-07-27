@@ -84,13 +84,7 @@ async function route(req: http.IncomingMessage, res: http.ServerResponse): Promi
     }
 
     if (method === 'GET' && action === 'subramos.list') {
-      const idRamo = url.searchParams.get('idramo') || '';
-      if (!idRamo) {
-        sendJson(res, 400, { ok: false, error: 'Falta el querystring idramo' });
-        return;
-      }
-
-      const subramos = await fetchBiSubramos(idRamo);
+      const subramos = await fetchBiSubramos();
       sendJson(res, 200, { ok: true, subramos });
       return;
     }

@@ -158,8 +158,8 @@ export async function fetchBiRamos(): Promise<Array<{ Texto: string; Valor: stri
   return fetchBiList(biRamosUrl, {}, 'ramos');
 }
 
-export async function fetchBiSubramos(idRamo: string | number): Promise<Array<{ Texto: string; Valor: string }>> {
-  return fetchBiList(biSubRamosUrl, { IdRamo: String(idRamo) }, 'subramos');
+export async function fetchBiSubramos(): Promise<Array<{ Texto: string; Valor: string }>> {
+  return fetchBiList(biSubRamosUrl, { IdRamo: '2' }, 'subramos');
 }
 
 export async function readSeed(): Promise<SeedFile> {

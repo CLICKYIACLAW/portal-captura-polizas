@@ -7,7 +7,10 @@ import {
   createLog,
   createPoliza,
   downloadAttachmentUrl,
+  loadAsegurados,
+  loadGrupos,
   loadRamos,
+  loadVendedores,
   loadSubramos
 } from './lib/api';
 import legacyBootstrap from '../storage/bootstrap.json';
@@ -61,6 +64,7 @@ function emptyCapture(length = 0) {
     linea: '',
     gerencia: '',
     vendedor: '',
+    vendedorId: '',
     asegurado: '',
     ramo: '',
     subramo: '',
@@ -326,9 +330,10 @@ function SectionFields({ sections, fields, layout, onChange }) {
             <div className="fields-grid">
               {fields.slice(start, end + 1).map((field, fieldIndex) => {
                 const absoluteIndex = start + fieldIndex;
+                const label = field.d || field.k;
                 return (
                   <div className="mini-field" key={`${field.k}-${absoluteIndex}`}>
-                    <label title={field.d}>{field.k}</label>
+                    <label title={field.k}>{label}</label>
                     <input
                       type="text"
                       value={layout[absoluteIndex] || ''}
@@ -378,6 +383,238 @@ function AttachmentsList({ items, onRemove, onDownload }) {
       ))}
     </div>
   );
+}
+
+function FileUploadCard({ title, help, category, items, maxFiles, accept, multiple, onAddFiles, onRemoveFile }) {
+  return (
+    <div className="upload-card">
+      <label className="dropzone">
+        <strong>{title}</strong>
+        <small>{help}</small>
+        <input
+          type="file"
+          accept={accept}
+          multiple={multiple}
+          onChange={(event) => onAddFiles(category, event.target.files, maxFiles)}
+        />
+      </label>
+      {items.length ? (
+        <div className="upload-files">
+          {items.map((item, index) => (
+            <div className="upload-file" key={`${item.cat}-${item.name}-${index}`}>
+              <div className="upload-file-meta">
+                <strong>{item.name}</strong>
+                <span>
+                  {item.cat.toUpperCase()} · {item.sizeMb} MB · {item.type || 'archivo'}
+                </span>
+              </div>
+              <button type="button" className="ghost-button danger" onClick={() => onRemoveFile(item)}>
+                Quitar
+              </button>
+            </div>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages';
+const ANTHROPIC_MODEL = 'claude-sonnet-4-6';
+const ANTHROPIC_API_KEY_STORAGE_KEY = 'clk-api-key';
+
+function getStoredAnthropicKey() {
+  try {
+    const key = window.localStorage.getItem(ANTHROPIC_API_KEY_STORAGE_KEY);
+    return key ? key.trim() : '';
+  } catch {
+    return '';
+  }
+}
+
+function storeAnthropicKey(key) {
+  try {
+    if (key) {
+      window.localStorage.setItem(ANTHROPIC_API_KEY_STORAGE_KEY, key.trim());
+    } else {
+      window.localStorage.removeItem(ANTHROPIC_API_KEY_STORAGE_KEY);
+    }
+  } catch {
+    // No-op.
+  }
+}
+
+function promptAnthropicKey() {
+  const key = window.prompt(
+    'Pega tu clave de API de Anthropic (empieza con sk-ant-). Se guarda solo en este navegador.'
+  );
+  const normalized = normalizeText(key);
+  if (normalized) {
+    storeAnthropicKey(normalized);
+    return normalized;
+  }
+  return '';
+}
+
+function ensureAnthropicKey() {
+  const stored = getStoredAnthropicKey();
+  if (stored) return stored;
+  return promptAnthropicKey();
+}
+
+function buildAnthropicDocumentBlock(file, base64) {
+  const isPdf = file?.type === 'application/pdf' || /\.pdf$/i.test(file?.name || '');
+  const isImage = file?.type?.startsWith('image/');
+  if (isPdf) {
+    return {
+      type: 'document',
+      source: {
+        type: 'base64',
+        media_type: 'application/pdf',
+        data: base64
+      }
+    };
+  }
+
+  if (isImage) {
+    return {
+      type: 'image',
+      source: {
+        type: 'base64',
+        media_type: file.type || 'image/png',
+        data: base64
+      }
+    };
+  }
+
+  return {
+    type: 'text',
+    text: `Archivo adjunto: ${file?.name || 'documento'}. No se pudo identificar como PDF o imagen.`
+  };
+}
+
+function extractJsonFromAnthropicText(text) {
+  const cleaned = String(text ?? '')
+    .replace(/```json/gi, '```')
+    .replace(/```/g, '')
+    .trim();
+  const start = cleaned.indexOf('{');
+  const end = cleaned.lastIndexOf('}');
+  if (start >= 0 && end > start) {
+    return JSON.parse(cleaned.slice(start, end + 1));
+  }
+  return JSON.parse(cleaned);
+}
+
+function normalizeSummaryValues(summaryData) {
+  if (!summaryData || typeof summaryData !== 'object' || Array.isArray(summaryData)) {
+    return {};
+  }
+
+  return Object.fromEntries(
+    Object.entries(summaryData)
+      .map(([key, value]) => [key, normalizeText(value)])
+      .filter(([, value]) => Boolean(value))
+  );
+}
+
+function buildAnthropicPrompt(fields, ramoFields, ramoLabel, subramoLabel) {
+  const layoutGuide = fields.map((field, index) => `${index}. ${field.d || field.k}`).join('\n');
+  const ramoGuide = ramoFields
+    .map(([key, label, description]) => `- ${key}: ${[label, description].filter(Boolean).join(' · ')}`)
+    .join('\n');
+
+  return [
+    'Analiza el documento adjunto de una póliza de seguros mexicana y extrae TODOS los datos que puedas completar en el formulario.',
+    'Responde ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones y sin texto adicional.',
+    'Cuando un dato no aparezca con claridad, usa null.',
+    'No inventes datos.',
+    'Conserva números, montos, referencias y póliza exactamente como aparezcan en el documento.',
+    'La estructura debe ser:',
+    '{',
+    '  "aseguradora": string | null,',
+    '  "poliza": string | null,',
+    '  "layout": Array<string | null> con exactamente la misma cantidad de campos del formulario,',
+    '  "ramoData": { [campo]: string | null },',
+    '  "resumenPrimas": {',
+    '    "prima_neta": string | null,',
+    '    "tasa_financiamiento": string | null,',
+    '    "gastos_expedicion": string | null,',
+    '    "descuentos": string | null,',
+    '    "subtotal": string | null,',
+    '    "iva": string | null,',
+    '    "importe_total": string | null,',
+    '    "recargos": string | null,',
+    '    "derechos": string | null,',
+    '    "ajuste": string | null,',
+    '    "otros_cargos": string | null',
+    '  },',
+    '  "notas": Array<string>',
+    '}',
+    `Ramo seleccionado: ${ramoLabel || 'sin ramo'}`,
+    `Subramo seleccionado: ${subramoLabel || 'sin subramo'}`,
+    'Campos del formulario, en este orden exacto:',
+    layoutGuide || '- (sin campos)',
+    ramoFields.length ? 'Campos específicos del ramo:' : 'Campos específicos del ramo: ninguno',
+    ramoGuide || '- ninguno',
+    'Resumen de primas: identifica y extrae todos los importes y conceptos visibles. Incluye al menos prima neta, tasa de financiamiento, gastos por expedición, descuentos, subtotal, I.V.A., importe total y cualquier otro recargo, derecho o ajuste que aparezca.',
+    'Devuelve los datos listos para llenar la captura.'
+  ].join('\n');
+}
+
+async function callAnthropic(file, fields, ramoFields, ramoLabel, subramoLabel) {
+  const apiKey = ensureAnthropicKey();
+  if (!apiKey) {
+    throw new Error('Se requiere la clave de API de Anthropic para leer la póliza.');
+  }
+
+  const fileData = await fileToBase64(file);
+  const content = [
+    buildAnthropicDocumentBlock(file, fileData),
+    { type: 'text', text: buildAnthropicPrompt(fields, ramoFields, ramoLabel, subramoLabel) }
+  ];
+
+  const response = await fetch(ANTHROPIC_API_URL, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      'anthropic-dangerous-direct-browser-access': 'true'
+    },
+    body: JSON.stringify({
+      model: ANTHROPIC_MODEL,
+      max_tokens: 4000,
+      messages: [
+        {
+          role: 'user',
+          content
+        }
+      ]
+    })
+  });
+
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    if (response.status === 401 || response.status === 403) {
+      storeAnthropicKey('');
+    }
+    const errorMessage = payload?.error?.message || payload?.error?.type || `Error HTTP ${response.status}`;
+    throw new Error(errorMessage);
+  }
+
+  const text = Array.isArray(payload?.content)
+    ? payload.content
+        .filter((block) => block && block.type === 'text')
+        .map((block) => block.text || '')
+        .join('\n')
+    : '';
+
+  if (!text.trim()) {
+    throw new Error('Anthropic no devolvió texto de extracción.');
+  }
+
+  return extractJsonFromAnthropicText(text);
 }
 
 function Modal({ open, title, message, tone = 'danger', closeLabel = 'Cerrar', onClose }) {
@@ -432,8 +669,15 @@ function App() {
   const [bootVersion, setBootVersion] = useState('React + MySQL · seed local');
   const [ramoCatalog, setRamoCatalog] = useState([]);
   const [subramoCatalog, setSubramoCatalog] = useState([]);
+  const [vendedorCatalog, setVendedorCatalog] = useState([]);
+  const [aseguradoCatalog, setAseguradoCatalog] = useState([]);
+  const [groupCatalog, setGroupCatalog] = useState([]);
   const [ramosLoading, setRamosLoading] = useState(false);
   const [subramosLoading, setSubramosLoading] = useState(false);
+  const [vendedoresLoading, setVendedoresLoading] = useState(false);
+  const [aseguradosLoading, setAseguradosLoading] = useState(false);
+  const [groupsLoading, setGroupsLoading] = useState(false);
+  const [readingDocument, setReadingDocument] = useState(false);
 
   function openErrorModal(title, message) {
     setErrorModal({ title, message });
@@ -467,6 +711,7 @@ function App() {
   const gerenciaOptions = catalogs.gerencias?.[capture.linea] || [];
   const ramoOptions = ramoCatalog;
   const subramoOptions = subramoCatalog;
+  const vendorOptions = vendedorCatalog;
   const normalizedRamoOptions = useMemo(
     () => (ramoOptions || []).map(getComboOption).filter((option) => option.label || option.value),
     [ramoOptions]
@@ -475,6 +720,7 @@ function App() {
     () => (subramoOptions || []).map(getComboOption).filter((option) => option.label || option.value),
     [subramoOptions]
   );
+  const selectedVendorId = String(capture.vendedorId || '').trim();
   const selectedRamoOption =
     normalizedRamoOptions.find((option) => option.value === String(capture.ramo || '')) || null;
   const selectedSubramoOption =
@@ -486,6 +732,9 @@ function App() {
   const ramoLabels = computeRamoLabels(captureSchema);
   const captureFiles = capture.files || [];
   const polizaFiles = captureFiles.filter((file) => file.cat === 'poliza');
+  const polizaAttachments = captureFiles.filter((file) => file.cat === 'poliza');
+  const reciboAttachments = captureFiles.filter((file) => file.cat === 'recibo');
+  const otrosAttachments = captureFiles.filter((file) => file.cat === 'otros');
   const showCaptureContextCombos = true;
 
   async function handleLogin(event) {
@@ -537,6 +786,8 @@ function App() {
     setActiveTab('captura');
     setCapture(emptyCapture());
     setAlta(emptyAlta());
+    setVendedorCatalog([]);
+    setAseguradoCatalog([]);
     setLoading(false);
   }
 
@@ -548,31 +799,44 @@ function App() {
     setCapture(emptyCapture(LOCAL_BOOT?.catalogs?.fields?.length || 0));
     setRamoCatalog([]);
     setSubramoCatalog([]);
+    setVendedorCatalog([]);
+    setAseguradoCatalog([]);
+    setGroupCatalog([]);
     setRamosLoading(true);
     setSubramosLoading(false);
-    loadRamos()
-      .then((ramosResult) => {
-        if (!mounted) return;
-        if (ramosResult?.ramos) {
-          setRamoCatalog(ramosResult.ramos);
-        } else {
-          setRamoCatalog([]);
-          openErrorModal('Error al cargar ramos', 'No se pudieron cargar los ramos');
-        }
-        setLoading(false);
-      })
-      .catch((fetchError) => {
-        if (!mounted) return;
+    setVendedoresLoading(true);
+    setAseguradosLoading(false);
+    setGroupsLoading(false);
+    Promise.allSettled([loadRamos(), loadVendedores(executive)]).then(([ramosResult, vendorsResult]) => {
+      if (!mounted) return;
+
+      if (ramosResult.status === 'fulfilled' && ramosResult.value?.ramos) {
+        setRamoCatalog(ramosResult.value.ramos);
+      } else {
         setRamoCatalog([]);
-        setSubramoCatalog([]);
-        openErrorModal('Error de arranque', fetchError.message || 'No se pudieron cargar los ramos');
-        setLoading(false);
-      })
-      .finally(() => {
-        if (!mounted) return;
-        setRamosLoading(false);
-        setSubramosLoading(false);
-      });
+        if (ramosResult.status === 'rejected') {
+          openErrorModal('Error al cargar ramos', ramosResult.reason?.message || 'No se pudieron cargar los ramos');
+        }
+      }
+
+      if (vendorsResult.status === 'fulfilled') {
+        setVendedorCatalog(vendorsResult.value || []);
+      } else {
+        setVendedorCatalog([]);
+        if (vendorsResult.status === 'rejected') {
+          openErrorModal(
+            'Error al cargar vendedores',
+            vendorsResult.reason?.message || 'No se pudieron cargar los vendedores'
+          );
+        }
+      }
+
+      setLoading(false);
+      setRamosLoading(false);
+      setSubramosLoading(false);
+      setVendedoresLoading(false);
+      setGroupsLoading(false);
+    });
     return () => {
       mounted = false;
     };
@@ -636,18 +900,137 @@ function App() {
     };
   }, [capture.ramo, selectedRamoLabel]);
 
+  useEffect(() => {
+    if (!selectedVendorId) {
+      setAseguradoCatalog([]);
+      setAseguradosLoading(false);
+      setGroupCatalog([]);
+      setGroupsLoading(false);
+      setCapture((current) =>
+        current.asegurado
+          ? {
+              ...current,
+              asegurado: ''
+            }
+          : current
+      );
+      return undefined;
+    }
+
+    let mounted = true;
+    setAseguradosLoading(true);
+    loadAsegurados(selectedVendorId)
+      .then((items) => {
+        if (!mounted) return;
+        setAseguradoCatalog(Array.isArray(items) ? items : []);
+      })
+      .catch((aseguradoError) => {
+        if (!mounted) return;
+        setAseguradoCatalog([]);
+        openErrorModal('Error al cargar asegurados', aseguradoError.message || 'No se pudieron cargar los asegurados');
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setAseguradosLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [selectedVendorId]);
+
+  useEffect(() => {
+    const vendorId = String(alta.vendedor ? (vendedorCatalog.find((vendor) => {
+      const option = getComboOption(vendor);
+      return option.label === alta.vendedor || option.value === alta.vendedor;
+    })?.IdVendedor || '') : '').trim();
+    const executiveGroup = normalizeText(executive?.Grupo || '');
+
+    if (!vendorId) {
+      setGroupCatalog([]);
+      setGroupsLoading(false);
+      setAlta((current) =>
+        current.grupo
+          ? {
+              ...current,
+              grupo: ''
+            }
+          : current
+      );
+      return undefined;
+    }
+
+    setAlta((current) =>
+      current.grupo
+        ? {
+            ...current,
+            grupo: ''
+          }
+        : current
+    );
+    setGroupCatalog([]);
+    setGroupsLoading(false);
+
+    if (executiveGroup) {
+      setGroupCatalog([executiveGroup]);
+      setAlta((current) => ({
+        ...current,
+        grupo: executiveGroup
+      }));
+      return undefined;
+    }
+
+    let mounted = true;
+    setGroupsLoading(true);
+    loadGrupos(vendorId)
+      .then((items) => {
+        if (!mounted) return;
+        const nextCatalog = Array.isArray(items) ? items.filter(Boolean) : [];
+        setGroupCatalog(nextCatalog);
+      })
+      .catch((groupError) => {
+        if (!mounted) return;
+        setGroupCatalog([]);
+        openErrorModal('Error al cargar grupos', groupError.message || 'No se pudieron cargar los grupos');
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setGroupsLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [alta.vendedor, vendedorCatalog, executive?.Grupo]);
+
   const summary = useMemo(() => {
     const layout = capture.layout || [];
-    const subtotal = Number(String(layout[43] || '').replace(/[$,\s]/g, '')) +
-      Number(String(layout[47] || '').replace(/[$,\s]/g, '')) +
-      Number(String(layout[45] || '').replace(/[$,\s]/g, '')) -
-      Number(String(layout[44] || '').replace(/[$,\s]/g, ''));
-    const total = Number(String(layout[48] || '').replace(/[$,\s]/g, ''));
+    const summaryData = capture.ramoData || {};
+    const subtotalSource = normalizeText(summaryData.subtotal || summaryData.Subtotal);
+    const totalSource = normalizeText(summaryData.importe_total || summaryData.prima_total || summaryData.total);
+    const subtotal = subtotalSource
+      ? Number(subtotalSource.replace(/[$,\s]/g, ''))
+      : Number(String(layout[43] || '').replace(/[$,\s]/g, '')) +
+        Number(String(layout[47] || '').replace(/[$,\s]/g, '')) +
+        Number(String(layout[45] || '').replace(/[$,\s]/g, '')) -
+        Number(String(layout[44] || '').replace(/[$,\s]/g, ''));
+    const total = totalSource
+      ? Number(totalSource.replace(/[$,\s]/g, ''))
+      : Number(String(layout[48] || '').replace(/[$,\s]/g, ''));
     return {
       subtotal: Number.isFinite(subtotal) && subtotal !== 0 ? subtotal : null,
-      total: Number.isFinite(total) && total !== 0 ? total : null
+      total: Number.isFinite(total) && total !== 0 ? total : null,
+      primaNeta: normalizeText(summaryData.prima_neta || summaryData.primaNeta),
+      tasaFinanciamiento: normalizeText(summaryData.tasa_financiamiento || summaryData.tasaFinanciamiento),
+      gastosExpedicion: normalizeText(summaryData.gastos_expedicion || summaryData.gastosExpedicion),
+      descuentos: normalizeText(summaryData.descuentos || summaryData.descuento),
+      iva: normalizeText(summaryData.iva || summaryData.iVA || summaryData.iva_total),
+      recargos: normalizeText(summaryData.recargos || summaryData.recargo),
+      derechos: normalizeText(summaryData.derechos),
+      ajuste: normalizeText(summaryData.ajuste),
+      otrosCargos: normalizeText(summaryData.otros_cargos || summaryData.otrosCargos)
     };
-  }, [capture.layout]);
+  }, [capture.layout, capture.ramoData]);
 
   const matchResult = useMemo(() => {
     if (!capture.extracted) return { tone: 'neutral', message: 'Aún no se ejecuta lectura asistida.' };
@@ -727,10 +1110,10 @@ function App() {
     });
   }
 
-  function removeFile(index) {
+  function removeFileByRef(targetFile) {
     setCapture((current) => ({
       ...current,
-      files: current.files.filter((_, fileIndex) => fileIndex !== index)
+      files: current.files.filter((file) => file !== targetFile)
     }));
   }
 
@@ -772,53 +1155,6 @@ function App() {
     pushToast('Completa el alta y volverás a la captura');
   }
 
-  async function callAnthropic(content) {
-    let apiKey = localStorage.getItem('clk-api-key');
-    if (!apiKey) {
-      apiKey = window.prompt(
-        'Pega tu clave de API de Anthropic para habilitar la lectura asistida en este navegador.\nSe guarda solo en este equipo.'
-      );
-      if (apiKey) {
-        apiKey = apiKey.trim();
-        if (apiKey) localStorage.setItem('clk-api-key', apiKey);
-      }
-    }
-
-    if (!apiKey) {
-      throw new Error('Falta la clave de API');
-    }
-
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
-        'anthropic-dangerous-direct-browser-access': 'true'
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-6',
-        max_tokens: 1400,
-        messages: [{ role: 'user', content }]
-      })
-    });
-
-    if (response.status === 401 || response.status === 403) {
-      localStorage.removeItem('clk-api-key');
-      throw new Error('La clave de API no es válida');
-    }
-
-    const data = await response.json();
-    if (data.error) throw new Error(data.error.message || 'Error de Anthropic');
-
-    const text = (data.content || [])
-      .filter((block) => block.type === 'text')
-      .map((block) => block.text)
-      .join('');
-    const cleaned = text.replace(/```json|```/g, '').trim();
-    return safeJsonParse(cleaned, null);
-  }
-
   async function readCaptureDocument() {
     const doc = polizaFiles[0];
     if (!doc) {
@@ -827,84 +1163,66 @@ function App() {
     }
 
     const file = doc.file;
-    const content = await fileToBase64(file);
+    setReadingDocument(true);
+    pushToast('Leyendo póliza con Anthropic...');
     const ramoSchema = getRamoSchema(catalogs, capture.ramo, capture.subramo);
     const ramoFields = ramoSchema ? [...(ramoSchema.main || []), ...(ramoSchema.full || [])] : [];
-    const prompt = [
-      `Analiza este documento de una póliza mexicana y devuelve SOLO un JSON object válido.`,
-      `Estructura esperada: { "aseguradora": string|null, "poliza": string|null, "layout": [${fields.length} valores], "ramo": object }`,
-      `El arreglo "layout" debe tener exactamente ${fields.length} elementos en el mismo orden del listado.`,
-      `Usa null cuando no encuentres el dato y conserva montos como números sin símbolos.`,
-      `Listas de campos:`,
-      ...fields.map((field, index) => `${index + 1}. ${field.k} — ${field.d}`),
-      ramoFields.length ? 'Campos específicos del ramo:' : '',
-      ...ramoFields.map((field) => `- ${field[0]}: ${field[2]}`),
-      'No incluyas explicación adicional ni markdown.'
-    ]
-      .filter(Boolean)
-      .join('\n');
-
-    let extracted;
     try {
-      extracted = await callAnthropic([
-        {
-          type: 'document',
-          source: {
-            type: 'base64',
-            media_type: file.type,
-            data: content
-          }
+      const result = await callAnthropic(file, fields, ramoFields, capture.ramo, capture.subramo);
+      const nextLayout = Array(fields.length).fill('');
+      if (Array.isArray(result?.layout)) {
+        result.layout.slice(0, fields.length).forEach((value, index) => {
+          nextLayout[index] = normalizeText(value);
+        });
+      }
+      const ramoData =
+        result?.ramoData && typeof result.ramoData === 'object' && !Array.isArray(result.ramoData)
+          ? Object.fromEntries(
+              ramoFields
+                .map(([key]) => {
+                  const value = normalizeText(result.ramoData?.[key]);
+                  return value ? [key, value] : null;
+                })
+                .filter(Boolean)
+            )
+          : {};
+      const resumenPrimas = normalizeSummaryValues(result?.resumenPrimas);
+
+      setCapture((current) => ({
+        ...current,
+        aseguradora: normalizeText(result?.aseguradora) || current.aseguradora,
+        poliza: normalizeText(result?.poliza) || current.poliza,
+        layout: nextLayout,
+        ramoData: {
+          ...(current.ramoData || {}),
+          ...ramoData,
+          ...resumenPrimas
         },
-        { type: 'text', text: prompt }
-      ]);
-    } catch (anthropicError) {
-      openErrorModal('Error de lectura', anthropicError.message || 'No se pudo completar la lectura asistida.');
+        extracted: true
+      }));
+
+      try {
+        await createLog({
+          evento: 'Lectura de póliza',
+          detalle: `${file.name} · ${capture.ramo || 'sin ramo'}`
+        });
+        appendBootRecord('log', {
+          id: `L${Date.now()}`,
+          ts: Date.now(),
+          evento: 'Lectura de póliza',
+          detalle: `${file.name} · ${capture.ramo || 'sin ramo'}`
+        });
+      } catch {
+        // La lectura ya quedó; la bitácora es opcional.
+      }
+
+      pushToast('Lectura completada');
+    } catch (readError) {
+      openErrorModal('Error de lectura', readError.message || 'No se pudo completar la lectura del archivo.');
       return;
+    } finally {
+      setReadingDocument(false);
     }
-
-    if (!extracted || typeof extracted !== 'object') {
-      throw new Error('La respuesta de lectura no vino en formato JSON');
-    }
-
-    const nextLayout = Array(fields.length).fill('');
-    if (Array.isArray(extracted.layout)) {
-      extracted.layout.forEach((value, index) => {
-        if (value !== null && value !== undefined && value !== '') {
-          nextLayout[index] = String(value);
-        }
-      });
-    }
-
-    const ramoData = {};
-    if (extracted.ramo && typeof extracted.ramo === 'object') {
-      Object.entries(extracted.ramo).forEach(([key, value]) => {
-        if (value !== null && value !== undefined && value !== '') {
-          ramoData[key] = String(value);
-        }
-      });
-    }
-
-    setCapture((current) => ({
-      ...current,
-      aseguradora: extracted.aseguradora ? String(extracted.aseguradora) : current.aseguradora,
-      poliza: extracted.poliza ? String(extracted.poliza) : current.poliza,
-      layout: nextLayout,
-      ramoData,
-      extracted: true
-    }));
-
-    await createLog({
-      evento: 'Lectura de póliza',
-      detalle: `${file.name} · ${capture.ramo || 'sin ramo'}`
-    });
-    appendBootRecord('log', {
-      id: `L${Date.now()}`,
-      ts: Date.now(),
-      evento: 'Lectura de póliza',
-      detalle: `${file.name} · ${capture.ramo || 'sin ramo'}`
-    });
-
-    pushToast('Lectura asistida completada');
   }
 
   async function savePoliza() {
@@ -1200,37 +1518,57 @@ function App() {
                   hint={`${gerenciaOptions.length} opciones`}
                   disabled={!capture.linea}
                   onSelect={(value) =>
-                    setCapture((current) => ({
-                      ...current,
-                      gerencia: value,
-                      vendedor: '',
-                      asegurado: ''
-                    }))
-                  }
-                />
-              ) : null}
-              <ComboField
-                label="Vendedor"
-                value={capture.vendedor}
-                options={[]}
-                placeholder="Selecciona el vendedor"
-                hint="Sin carga de datos por ahora"
-                disabled
-                onSelect={(value) =>
                   setCapture((current) => ({
                     ...current,
-                    vendedor: value,
+                    gerencia: value,
+                    vendedor: '',
+                    vendedorId: '',
                     asegurado: ''
                   }))
                 }
               />
+              ) : null}
+              <ComboField
+                label="Vendedor"
+                value={capture.vendedor}
+                options={vendorOptions}
+                placeholder={vendedoresLoading ? 'Cargando vendedores...' : 'Selecciona el vendedor'}
+                hint={vendedoresLoading ? 'Cargando vendedores...' : vendorOptions.length ? `${vendorOptions.length} opciones` : 'Sin vendedores'}
+                disabled={vendedoresLoading || !vendorOptions.length}
+                onSelect={(value) => {
+                  const selectedVendor = vendorOptions.find(
+                    (option) => normalizeText(option.Valor ?? option.Texto ?? '') === normalizeText(value)
+                  );
+
+                  setCapture((current) => ({
+                    ...current,
+                    vendedor: value,
+                    vendedorId: selectedVendor?.IdVendedor ? String(selectedVendor.IdVendedor) : '',
+                    asegurado: ''
+                  }));
+                }}
+              />
               <ComboField
                 label="Asegurado"
                 value={capture.asegurado}
-                options={[]}
-                placeholder="Escribe para buscar al asegurado"
-                hint="Sin carga de datos por ahora"
-                disabled
+                options={aseguradoCatalog}
+                placeholder={
+                  aseguradosLoading
+                    ? 'Cargando asegurados...'
+                    : selectedVendorId
+                      ? 'Selecciona el asegurado'
+                      : 'Selecciona un vendedor primero'
+                }
+                hint={
+                  aseguradosLoading
+                    ? 'Cargando asegurados...'
+                    : selectedVendorId
+                      ? aseguradoCatalog.length
+                        ? `${aseguradoCatalog.length} opciones`
+                        : 'Sin asegurados'
+                      : 'Depende del vendedor'
+                }
+                disabled={aseguradosLoading || !selectedVendorId || !aseguradoCatalog.length}
                 onSelect={(value) =>
                   setCapture((current) => ({
                     ...current,
@@ -1283,57 +1621,101 @@ function App() {
             headAlign="left"
           >
             <div className="file-grid">
-              <label className="dropzone">
-                <strong>Subir póliza</strong>
-                <small>PDF, JPG o PNG · 1 archivo</small>
-                <input
-                  type="file"
-                  accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
-                  onChange={(event) => addFiles('poliza', event.target.files, 1)}
-                />
-              </label>
-              <label className="dropzone">
-                <strong>Subir recibo</strong>
-                <small>PDF, JPG o PNG · 1 archivo</small>
-                <input
-                  type="file"
-                  accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
-                  onChange={(event) => addFiles('recibo', event.target.files, 1)}
-                />
-              </label>
-              <label className="dropzone">
-                <strong>Subir otros</strong>
-                <small>PDF, JPG o PNG · hasta 3 archivos</small>
-                <input
-                  type="file"
-                  accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
-                  multiple
-                  onChange={(event) => addFiles('otros', event.target.files, 3)}
-                />
-              </label>
+              <FileUploadCard
+                title="Subir póliza"
+                help="PDF, JPG o PNG · 1 archivo"
+                category="poliza"
+                items={polizaAttachments}
+                maxFiles={1}
+                accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                multiple={false}
+                onAddFiles={addFiles}
+                onRemoveFile={removeFileByRef}
+              />
+              <FileUploadCard
+                title="Subir recibo"
+                help="PDF, JPG o PNG · 1 archivo"
+                category="recibo"
+                items={reciboAttachments}
+                maxFiles={1}
+                accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                multiple={false}
+                onAddFiles={addFiles}
+                onRemoveFile={removeFileByRef}
+              />
+              <FileUploadCard
+                title="Subir otros"
+                help="PDF, JPG o PNG · hasta 3 archivos"
+                category="otros"
+                items={otrosAttachments}
+                maxFiles={3}
+                accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                multiple
+                onAddFiles={addFiles}
+                onRemoveFile={removeFileByRef}
+              />
             </div>
-
-            <AttachmentsList items={captureFiles} onRemove={removeFile} />
             <div className="actions-row">
-              <button type="button" className="primary-button" onClick={readCaptureDocument} disabled={!polizaFiles.length}>
-                Leer póliza
+              <button
+                type="button"
+                className="primary-button"
+                onClick={readCaptureDocument}
+                disabled={!polizaFiles.length || readingDocument}
+              >
+                {readingDocument ? 'Leyendo...' : 'Leer póliza'}
               </button>
             </div>
           </Card>
 
           <Card title="Resumen de prima" subtitle="Revisa importes antes de guardar">
-            <div className="summary-grid">
-              <div>
-                <span>Subtotal estimado</span>
+            <div className="premium-summary">
+              <div className="premium-row">
+                <span>Prima neta</span>
+                <input type="text" value={summary.primaNeta || capture.ramoData?.prima_neta || ''} readOnly />
+              </div>
+              <div className="premium-row">
+                <span>Tasa financiamiento</span>
+                <input type="text" value={summary.tasaFinanciamiento || capture.ramoData?.tasa_financiamiento || ''} readOnly />
+              </div>
+              <div className="premium-row">
+                <span>Gastos por expedición</span>
+                <input type="text" value={summary.gastosExpedicion || capture.ramoData?.gastos_expedicion || ''} readOnly />
+              </div>
+              <div className="premium-row">
+                <span>Descuentos</span>
+                <input type="text" value={summary.descuentos || capture.ramoData?.descuentos || ''} readOnly />
+              </div>
+              <div className="premium-row">
+                <span>Recargos</span>
+                <input type="text" value={summary.recargos || capture.ramoData?.recargos || ''} readOnly />
+              </div>
+              <div className="premium-row">
+                <span>Derechos</span>
+                <input type="text" value={summary.derechos || capture.ramoData?.derechos || ''} readOnly />
+              </div>
+              <div className="premium-row">
+                <span>Ajuste</span>
+                <input type="text" value={summary.ajuste || capture.ramoData?.ajuste || ''} readOnly />
+              </div>
+              <div className="premium-row">
+                <span>Otros cargos</span>
+                <input type="text" value={summary.otrosCargos || capture.ramoData?.otros_cargos || ''} readOnly />
+              </div>
+              <div className="premium-row premium-subtotal">
+                <span>Subtotal</span>
                 <strong>{summary.subtotal !== null ? formatMoney(summary.subtotal) : '—'}</strong>
               </div>
-              <div>
-                <span>Prima total</span>
+              <div className="premium-row">
+                <span>I.V.A.</span>
+                <input type="text" value={summary.iva || capture.ramoData?.iva || ''} readOnly />
+              </div>
+              <div className="premium-total">
+                <span>Importe total</span>
                 <strong>{summary.total !== null ? formatMoney(summary.total) : '—'}</strong>
               </div>
             </div>
             <div className="warning-box">
-              Revisa que prima neta, recargos, gastos, descuento, IVA y total cuadren antes de guardar.
+              Revisa que prima neta, recargos, derechos, ajuste, otros cargos, gastos, descuento, IVA y total cuadren antes de guardar.
             </div>
           </Card>
 
@@ -1440,27 +1822,44 @@ function App() {
               <ComboField
                 label="Vendedor"
                 value={alta.vendedor}
-                options={[]}
-                placeholder="Selecciona el vendedor"
-                hint="Sin carga de datos por ahora"
-                disabled
-                onSelect={(value) => setAlta((current) => ({ ...current, vendedor: value }))}
+                options={vendorOptions}
+                placeholder={vendedoresLoading ? 'Cargando vendedores...' : 'Selecciona el vendedor'}
+                hint={vendedoresLoading ? 'Cargando vendedores...' : vendorOptions.length ? `${vendorOptions.length} opciones` : 'Sin vendedores'}
+                disabled={vendedoresLoading || !vendorOptions.length}
+                onSelect={(value) => {
+                  const selectedVendor = vendedorCatalog.find((vendor) => {
+                    const option = getComboOption(vendor);
+                    return option.label === value || option.value === value;
+                  });
+
+                  setGroupCatalog([]);
+                  setGroupsLoading(false);
+                  setAlta((current) => ({
+                    ...current,
+                    vendedor: value,
+                    grupo: '',
+                    vendedorId: selectedVendor?.IdVendedor ? String(selectedVendor.IdVendedor) : ''
+                  }));
+                }}
               />
               <ComboField
                 label="Grupo"
                 value={alta.grupo}
-                options={records.grupos.map((group) => group.nombre)}
-                placeholder="Busca o escribe un grupo"
+                options={groupCatalog}
+                placeholder={groupsLoading ? 'Cargando grupos...' : 'Selecciona o escribe un grupo'}
+                hint={groupsLoading ? 'Cargando grupos...' : groupCatalog.length ? `${groupCatalog.length} opciones` : 'Sin grupos'}
+                disabled={groupsLoading || (!groupCatalog.length && !alta.vendedor)}
                 onSelect={(value) => setAlta((current) => ({ ...current, grupo: value }))}
                 actionLabel={(query) => (query ? `Registrar grupo «${query}»` : 'Registrar nuevo grupo')}
                 onAction={createGroupFromAlta}
               />
             </div>
 
+            <div className="form-divider">Identidad</div>
             {alta.tipo === 'fisica' ? (
-              <div className="ramo-grid">
+              <div className="ramo-grid alta-grid">
                 <div className="mini-field">
-                  <label>Apellido paterno</label>
+                  <label>Apellido paterno *</label>
                   <input
                     type="text"
                     value={alta.apP}
@@ -1476,7 +1875,7 @@ function App() {
                   />
                 </div>
                 <div className="mini-field">
-                  <label>Nombre(s)</label>
+                  <label>Nombre(s) *</label>
                   <input
                     type="text"
                     value={alta.nombres}
@@ -1485,9 +1884,9 @@ function App() {
                 </div>
               </div>
             ) : (
-              <div className="ramo-grid">
-                <div className="mini-field full">
-                  <label>Razón social</label>
+              <div className="ramo-grid alta-grid">
+                <div className="mini-field span-3">
+                  <label>Razón social *</label>
                   <input
                     type="text"
                     value={alta.razon}
@@ -1497,7 +1896,7 @@ function App() {
               </div>
             )}
 
-            <div className="ramo-grid">
+            <div className="ramo-grid alta-grid">
               <div className="mini-field">
                 <label>RFC</label>
                 <input type="text" value={alta.rfc} onChange={(e) => setAlta((current) => ({ ...current, rfc: e.target.value }))} />
@@ -1510,6 +1909,10 @@ function App() {
                 <label>Teléfono</label>
                 <input type="text" value={alta.tel} onChange={(e) => setAlta((current) => ({ ...current, tel: e.target.value }))} />
               </div>
+            </div>
+
+            <div className="form-divider">Domicilio</div>
+            <div className="ramo-grid alta-grid">
               <div className="mini-field">
                 <label>Calle</label>
                 <input type="text" value={alta.calle} onChange={(e) => setAlta((current) => ({ ...current, calle: e.target.value }))} />
@@ -1527,13 +1930,17 @@ function App() {
                 <input type="text" value={alta.colonia} onChange={(e) => setAlta((current) => ({ ...current, colonia: e.target.value }))} />
               </div>
               <div className="mini-field">
-                <label>Municipio</label>
+                <label>Municipio / alcaldía</label>
                 <input type="text" value={alta.municipio} onChange={(e) => setAlta((current) => ({ ...current, municipio: e.target.value }))} />
               </div>
               <div className="mini-field">
                 <label>Estado</label>
                 <input type="text" value={alta.estado} onChange={(e) => setAlta((current) => ({ ...current, estado: e.target.value }))} />
               </div>
+            </div>
+
+            <div className="form-divider">Datos fiscales</div>
+            <div className="ramo-grid alta-grid">
               <div className="mini-field">
                 <label>Giro</label>
                 <input type="text" value={alta.giro} onChange={(e) => setAlta((current) => ({ ...current, giro: e.target.value }))} />
