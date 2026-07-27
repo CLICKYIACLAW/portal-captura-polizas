@@ -1,14 +1,37 @@
-export const POLIZA_LAYOUT_FIELDS = [
+const layoutFields = [
+  // Póliza
   { k: 'DatDocumentos.IDDocto', d: 'IDDocto', section: 'Póliza' },
   { k: 'DatDocumentos.TipoDocto', d: 'Tipo Documento', section: 'Póliza' },
   { k: 'DatDocumentos.Documento', d: 'Documento', section: 'Póliza' },
-  { k: 'DatDocumentos.IDCli', d: 'Cliente', section: 'Contratante' },
-  { k: 'DatDocumentos.IDDir', d: 'Dirección', section: 'Contratante' },
-  { k: 'DatDocumentos.IDGrupo', d: 'Grupo', section: 'Contratante' },
-  { k: 'DatDocumentos.IDAgente', d: 'Agente', section: 'Póliza' },
+  { k: 'DatDocumentos.IDAgenteNum', d: 'Agente número', section: 'Póliza' },
+  { k: 'DatDocumentos.IDAgenteNombre', d: 'Agente nombre', section: 'Póliza' },
   { k: 'DatDocumentos.IDFPago', d: 'Forma de Pago', section: 'Póliza' },
   { k: 'DatDocumentos.IDMon', d: 'Moneda', section: 'Póliza' },
   { k: 'DatDocumentos.IDSRamo', d: 'Sub Ramo', section: 'Póliza' },
+  { k: 'DatDocumentos.FDesde', d: 'Inicio de Vigencia', section: 'Póliza' },
+  { k: 'DatDocumentos.FHasta', d: 'Fin de Vigencia', section: 'Póliza' },
+  { k: 'DatDocumentos.Renovacion', d: 'Renovación', section: 'Póliza' },
+  { k: 'DatDocumentos.FAntiguedad', d: 'Fecha de Antigüedad', section: 'Póliza' },
+  { k: 'DatDocumentos.FSolicitud', d: 'Solicitud', section: 'Póliza' },
+  { k: 'DatDocumentos.Status', d: 'Estatus', section: 'Póliza' },
+  { k: 'DatDocumentos.ClasDocto', d: 'Clasificación Documento', section: 'Póliza' },
+  { k: 'DatDocumentos.TCDocto', d: 'T. de Cambio', section: 'Póliza' },
+  { k: 'DatDocumentos.IDUserC', d: 'Usuario que Capturó', section: 'Póliza' },
+
+  // Contratante
+  { k: 'DatDocumentos.IDCli', d: 'Cliente', section: 'Contratante' },
+  { k: 'DatDocumentos.IDDirCalle', d: 'Calle', section: 'Contratante' },
+  { k: 'DatDocumentos.IDDirNumExt', d: 'Num ext.', section: 'Contratante' },
+  { k: 'DatDocumentos.IDDirNumInt', d: 'Num int.', section: 'Contratante' },
+  { k: 'DatDocumentos.IDDirCP', d: 'Código postal', section: 'Contratante' },
+  { k: 'DatDocumentos.IDDirColonia', d: 'Colonia', section: 'Contratante' },
+  { k: 'DatDocumentos.IDDirDelegacion', d: 'Delegación', section: 'Contratante' },
+  { k: 'DatDocumentos.IDDirEstado', d: 'Estado', section: 'Contratante' },
+  { k: 'DatDocumentos.IDDirCiudad', d: 'Ciudad', section: 'Contratante' },
+  { k: 'DatDocumentos.IDDirPais', d: 'País', section: 'Contratante' },
+  { k: 'DatDocumentos.IDGrupo', d: 'Grupo', section: 'Contratante' },
+
+  // Control
   { k: 'DatDocumentos.IDEjecut', d: 'Ejecutivo', section: 'Control' },
   { k: 'DatDocumentos.IDEjecutCob', d: 'Ejecutivo de Cobranza', section: 'Control' },
   { k: 'DatDocumentos.IDEjecutRec', d: 'Ejecutivo de Reclamo', section: 'Control' },
@@ -19,39 +42,21 @@ export const POLIZA_LAYOUT_FIELDS = [
   { k: 'DatDocumentos.IDEjecutCia', d: 'Ejecutivo de Compañía', section: 'Control' },
   { k: 'DatDocumentos.CCobro', d: 'Conducto de Cobro', section: 'Control' },
   { k: 'DatDocumentos.TVenta', d: 'Tipo de Venta', section: 'Control' },
-  { k: 'DatDocumentos.FDesde', d: 'Inicio de Vigencia', section: 'Póliza' },
-  { k: 'DatDocumentos.FHasta', d: 'Fin de Vigencia', section: 'Póliza' },
-  { k: 'DatDocumentos.Renovacion', d: 'Renovación', section: 'Control' },
-  { k: 'DatDocumentos.FAntiguedad', d: 'Fecha de Antigüedad', section: 'Control' },
-  { k: 'DatDocumentos.FSolicitud', d: 'Solicitud', section: 'Control' },
-  { k: 'DatDocumentos.Status', d: 'Estatus', section: 'Control' },
-  { k: 'DatDocumentos.PrimaNeta', d: 'Prima neta', section: 'Importe Primas' },
-  { k: 'DatDocumentos.Descuento', d: 'Descuento', section: 'Importe Primas' },
-  { k: 'DatDocumentos.PorDesc', d: '% Descuento', section: 'Importe Primas' },
-  { k: 'DatDocumentos.ExtraPrima', d: 'Extra Prima', section: 'Importe Primas' },
-  { k: 'DatDocumentos.PorExtraP', d: '% Extra Prima', section: 'Importe Primas' },
-  { k: 'DatDocumentos.Recargos', d: 'Recargos', section: 'Importe Primas' },
-  { k: 'DatDocumentos.PorRecargos', d: '% Recargos', section: 'Importe Primas' },
-  { k: 'DatDocumentos.Derechos', d: 'Derechos', section: 'Importe Primas' },
-  { k: 'DatDocumentos.STotal', d: 'Sub total', section: 'Importe Primas' },
-  { k: 'DatDocumentos.Impuesto1', d: 'IVA', section: 'Importe Primas' },
-  { k: 'DatDocumentos.PorImp1', d: '% IVA', section: 'Importe Primas' },
-  { k: 'DatDocumentos.PrimaTotal', d: 'Prima total', section: 'Importe Primas' },
-  { k: 'DatDocumentos.Comision0', d: 'Neta', section: 'Importe Primas' },
-  { k: 'DatDocumentos.PorCom0', d: '% Com. Neta', section: 'Importe Primas' },
-  { k: 'DatDocumentos.Comision1', d: 'Extra Prima', section: 'Importe Primas' },
-  { k: 'DatDocumentos.PorCom1', d: '% Com. Extra Prima', section: 'Importe Primas' },
-  { k: 'DatDocumentos.Comision2', d: 'Recargos', section: 'Importe Primas' },
-  { k: 'DatDocumentos.PorCom2', d: '% Com. Recargos', section: 'Importe Primas' },
-  { k: 'DatDocumentos.Comision3', d: 'Derechos', section: 'Importe Primas' },
-  { k: 'DatDocumentos.PorCom3', d: '% Com. Derechos', section: 'Importe Primas' },
-  { k: 'DatDocumentos.Concepto', d: 'Concepto', section: 'Importe Primas' },
-  { k: 'DatDocumentos.ClasDocto', d: 'Clasificación Documento', section: 'Control' },
-  { k: 'DatDocumentos.TCDocto', d: 'T. de Cambio', section: 'Control' },
-  { k: 'DatDocumentos.IDUserC', d: 'Usuario que Capturó', section: 'Control' },
-  { k: 'DatDoctoDetail.IDDocto', d: 'Documento ID', section: 'Póliza' },
+
+  // Asegurado
+  { k: 'DatDoctoDetail.IDDocto', d: 'Documento ID', section: 'Asegurado' },
   { k: 'DatDoctoDetail.IDAseg', d: 'Nombre', section: 'Asegurado' },
-  { k: 'DatDoctoDetail.IDDir', d: 'Dirección', section: 'Asegurado' },
+  { k: 'DatDoctoDetail.IDDirCalle', d: 'Calle', section: 'Asegurado' },
+  { k: 'DatDoctoDetail.IDDirNumExt', d: 'Num ext.', section: 'Asegurado' },
+  { k: 'DatDoctoDetail.IDDirNumInt', d: 'Num int.', section: 'Asegurado' },
+  { k: 'DatDoctoDetail.IDDirCP', d: 'Código postal', section: 'Asegurado' },
+  { k: 'DatDoctoDetail.IDDirColonia', d: 'Colonia', section: 'Asegurado' },
+  { k: 'DatDoctoDetail.IDDirDelegacion', d: 'Delegación', section: 'Asegurado' },
+  { k: 'DatDoctoDetail.IDDirEstado', d: 'Estado', section: 'Asegurado' },
+  { k: 'DatDoctoDetail.IDDirCiudad', d: 'Ciudad', section: 'Asegurado' },
+  { k: 'DatDoctoDetail.IDDirPais', d: 'País', section: 'Asegurado' },
+
+  // Vehículo
   { k: 'DatDoctoDetail.Clave', d: 'Clave', section: 'Vehículo' },
   { k: 'DatDoctoDetail.Marca', d: 'Marca', section: 'Vehículo' },
   { k: 'DatDoctoDetail.Tipo', d: 'Tipo', section: 'Vehículo' },
@@ -59,7 +64,7 @@ export const POLIZA_LAYOUT_FIELDS = [
   { k: 'DatDoctoDetail.Serie', d: 'Serie', section: 'Vehículo' },
   { k: 'DatDoctoDetail.Motor', d: 'Motor', section: 'Vehículo' },
   { k: 'DatDoctoDetail.Repuve', d: 'Repuve', section: 'Vehículo' },
-  { k: 'DatDoctoDetail.Placas', d: 'Placas /Matricula', section: 'Vehículo' },
+  { k: 'DatDoctoDetail.Placas', d: 'Placas / Matricula', section: 'Vehículo' },
   { k: 'DatDoctoDetail.EstadoCircula', d: 'Estado circula', section: 'Vehículo' },
   { k: 'DatDoctoDetail.Color', d: 'Color', section: 'Vehículo' },
   { k: 'DatDoctoDetail.UsoVehiculo', d: 'Uso del vehículo', section: 'Vehículo' },
@@ -67,30 +72,22 @@ export const POLIZA_LAYOUT_FIELDS = [
   { k: 'DatDoctoDetail.Servicio', d: 'Servicio', section: 'Vehículo' }
 ];
 
+export const POLIZA_LAYOUT_FIELDS = layoutFields;
+
 export function buildPolizaSections(fields = POLIZA_LAYOUT_FIELDS) {
-  const sections = [];
-  let currentSection = null;
-  let startIndex = 0;
+  const sectionMap = new Map();
+  const sectionOrder = [];
 
   fields.forEach((field, index) => {
     const section = String(field.section || 'General');
-    if (currentSection === null) {
-      currentSection = section;
-      startIndex = index;
-      return;
+    if (!sectionMap.has(section)) {
+      sectionMap.set(section, []);
+      sectionOrder.push(section);
     }
-    if (section !== currentSection) {
-      sections.push([currentSection, startIndex, index - 1]);
-      currentSection = section;
-      startIndex = index;
-    }
+    sectionMap.get(section).push(index);
   });
 
-  if (currentSection !== null) {
-    sections.push([currentSection, startIndex, fields.length - 1]);
-  }
-
-  return sections;
+  return sectionOrder.map((section) => [section, sectionMap.get(section)]);
 }
 
 export const POLIZA_LAYOUT_SECTIONS = buildPolizaSections();

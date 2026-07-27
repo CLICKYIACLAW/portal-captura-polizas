@@ -325,18 +325,20 @@ function SectionFields({ sections, fields, layout, onChange }) {
   return (
     <div className="section-grid">
       {(sections || []).map((section, index) => {
-        const [title, start, end] = section;
+        const [title, indexes] = section;
+        const fieldIndexes = Array.isArray(indexes) ? indexes : [];
         return (
           <details key={`${title}-${index}`} className="section-card" open={index < 2}>
             <summary>
               <span>{title}</span>
               <span className="badge">
-                {countFilled(layout.slice(start, end + 1))} / {end - start + 1}
+                {countFilled(fieldIndexes.map((fieldIndex) => layout[fieldIndex]))} / {fieldIndexes.length}
               </span>
             </summary>
             <div className="fields-grid">
-              {fields.slice(start, end + 1).map((field, fieldIndex) => {
-                const absoluteIndex = start + fieldIndex;
+              {fieldIndexes.map((absoluteIndex) => {
+                const field = fields[absoluteIndex];
+                if (!field) return null;
                 const label = field.d || field.k;
                 return (
                   <div className="mini-field" key={`${field.k}-${absoluteIndex}`}>
@@ -538,8 +540,8 @@ function formatSummaryCurrency(value) {
 
 function buildAnthropicPrompt(fields, sections, ramoLabel, subramoLabel) {
   const layoutGuide = sections
-    .map(([section, start, end]) => {
-      const sectionFields = fields.slice(start, end + 1).map((field) => `- ${field.d || field.k}`).join('\n');
+    .map(([section, indexes]) => {
+      const sectionFields = (indexes || []).map((fieldIndex) => `- ${fields[fieldIndex]?.d || fields[fieldIndex]?.k}`).join('\n');
       return `${section}:\n${sectionFields}`;
     })
     .join('\n\n');
@@ -1035,36 +1037,21 @@ function App() {
   }, [alta.vendedor, vendedorCatalog, executive?.Grupo]);
 
   const summary = useMemo(() => {
-    const layout = capture.layout || [];
     const summaryData = capture.ramoData || {};
-    const subtotalSource =
-      normalizeText(summaryData.subtotal || summaryData.Subtotal) ||
-      normalizeText(layout[POLIZA_LAYOUT_INDEX_BY_KEY['DatDocumentos.STotal']] || '');
-    const totalSource =
-      normalizeText(summaryData.importe_total || summaryData.prima_total || summaryData.total) ||
-      normalizeText(layout[POLIZA_LAYOUT_INDEX_BY_KEY['DatDocumentos.PrimaTotal']] || '');
-    const subtotal = subtotalSource
-      ? Number(subtotalSource.replace(/[$,\s]/g, ''))
-      : Number(String(layout[POLIZA_LAYOUT_INDEX_BY_KEY['DatDocumentos.STotal']] || '').replace(/[$,\s]/g, ''));
-    const total = totalSource
-      ? Number(totalSource.replace(/[$,\s]/g, ''))
-      : Number(String(layout[POLIZA_LAYOUT_INDEX_BY_KEY['DatDocumentos.PrimaTotal']] || '').replace(/[$,\s]/g, ''));
+    const subtotalSource = normalizeText(summaryData.subtotal || summaryData.Subtotal);
+    const totalSource = normalizeText(summaryData.importe_total || summaryData.prima_total || summaryData.total);
+    const subtotal = subtotalSource ? Number(subtotalSource.replace(/[$,\s]/g, '')) : null;
+    const total = totalSource ? Number(totalSource.replace(/[$,\s]/g, '')) : null;
     return {
       subtotal: Number.isFinite(subtotal) && subtotal !== 0 ? subtotal : null,
       total: Number.isFinite(total) && total !== 0 ? total : null,
-      primaNeta:
-        normalizeText(summaryData.prima_neta || summaryData.primaNeta) ||
-        normalizeText(layout[POLIZA_LAYOUT_INDEX_BY_KEY['DatDocumentos.PrimaNeta']] || ''),
+      primaNeta: normalizeText(summaryData.prima_neta || summaryData.primaNeta),
       tasaFinanciamiento: normalizeText(summaryData.tasa_financiamiento || summaryData.tasaFinanciamiento),
       gastosExpedicion: normalizeText(summaryData.gastos_expedicion || summaryData.gastosExpedicion),
-      descuentos:
-        normalizeText(summaryData.descuentos || summaryData.descuento) ||
-        normalizeText(layout[POLIZA_LAYOUT_INDEX_BY_KEY['DatDocumentos.Descuento']] || ''),
-      iva:
-        normalizeText(summaryData.iva || summaryData.iVA || summaryData.iva_total) ||
-        normalizeText(layout[POLIZA_LAYOUT_INDEX_BY_KEY['DatDocumentos.Impuesto1']] || ''),
+      descuentos: normalizeText(summaryData.descuentos || summaryData.descuento),
+      iva: normalizeText(summaryData.iva || summaryData.iVA || summaryData.iva_total),
       recargos: normalizeText(summaryData.recargos || summaryData.recargo),
-      derechos: normalizeText(summaryData.derechos) || normalizeText(layout[POLIZA_LAYOUT_INDEX_BY_KEY['DatDocumentos.Derechos']] || ''),
+      derechos: normalizeText(summaryData.derechos),
       ajuste: normalizeText(summaryData.ajuste),
       otrosCargos: normalizeText(summaryData.otros_cargos || summaryData.otrosCargos)
     };
