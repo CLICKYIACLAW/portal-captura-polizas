@@ -741,6 +741,7 @@ function App() {
   const showSubramo = normalizeKey(selectedRamoLabel) === normalizeKey('Daños');
   const captureSchema = getRamoSchema(catalogs, selectedRamoLabel, selectedSubramoLabel);
   const ramoLabels = computeRamoLabels(captureSchema);
+  const captureLocked = readingDocument;
   const captureFiles = capture.files || [];
   const polizaFiles = captureFiles.filter((file) => file.cat === 'poliza');
   const polizaAttachments = captureFiles.filter((file) => file.cat === 'poliza');
@@ -1408,6 +1409,17 @@ function App() {
       onClose={closeErrorModal}
     />
   ) : null;
+  const captureLockNode = captureLocked ? (
+    <div className="screen-lock" role="status" aria-live="polite" aria-label="Bloqueo de captura en progreso">
+      <div className="screen-lock__card">
+        <div className="screen-lock__spinner" aria-hidden="true" />
+        <div>
+          <strong>Leyendo póliza</strong>
+          <p>La pantalla quedó bloqueada mientras se extraen los datos. No cambies nada hasta que termine.</p>
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   if (!executive) {
     return (
@@ -1461,7 +1473,7 @@ function App() {
   return (
     <>
       {errorModalNode}
-      <div className="app-shell">
+      <div className={`app-shell ${captureLocked ? 'blocked' : ''}`}>
       <header className="topbar">
         <div className="topbar-main">
           <div className="title-row">
@@ -1479,7 +1491,7 @@ function App() {
           </div>
         </header>
 
-      <main className="app-main">
+      <main className="app-main" aria-busy={captureLocked ? 'true' : 'false'} inert={captureLocked ? '' : undefined}>
         <nav className="tabs">
         {TAB_IDS.map((tabId) => (
           <button
@@ -2070,7 +2082,8 @@ function App() {
         ) : null}
 
       </main>
-    </div>
+      {captureLockNode}
+      </div>
     </>
   );
 }

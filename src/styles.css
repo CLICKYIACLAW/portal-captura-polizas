@@ -120,11 +120,13 @@ a {
   position: relative;
 }
 
-.app-shell.blocked .app-main {
+.app-shell.blocked > :not(.screen-lock) {
   filter: saturate(0.9);
+  pointer-events: none;
+  user-select: none;
 }
 
-.app-shell.blocked .app-main::before {
+.app-shell.blocked > :not(.screen-lock)::before {
   content: '';
   position: fixed;
   inset: 0;
@@ -132,6 +134,51 @@ a {
   backdrop-filter: blur(2px);
   pointer-events: none;
   z-index: 20;
+}
+
+.screen-lock {
+  position: fixed;
+  inset: 0;
+  z-index: 70;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(244, 245, 247, 0.42);
+  backdrop-filter: blur(6px);
+}
+
+.screen-lock__card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  width: min(520px, 100%);
+  padding: 18px 20px;
+  border-radius: 20px;
+  border: 1px solid rgba(17, 24, 39, 0.08);
+  background: rgba(255, 255, 255, 0.98);
+  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.16);
+}
+
+.screen-lock__card strong {
+  display: block;
+  font-size: 1rem;
+  margin-bottom: 4px;
+}
+
+.screen-lock__card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.screen-lock__spinner {
+  width: 42px;
+  height: 42px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  border: 3px solid rgba(239, 91, 43, 0.16);
+  border-top-color: var(--brand);
+  animation: screen-lock-spin 900ms linear infinite;
 }
 
 .topbar {
@@ -993,6 +1040,12 @@ a {
   display: grid;
   place-items: center;
   padding: 20px;
+}
+
+@keyframes screen-lock-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .hero-card {
