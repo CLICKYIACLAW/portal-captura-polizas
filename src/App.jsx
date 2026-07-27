@@ -518,6 +518,17 @@ function normalizeSummaryValues(summaryData) {
   );
 }
 
+function formatSummaryCurrency(value) {
+  const normalized = normalizeText(value);
+  if (!normalized) return '';
+  const amount = Number(normalized.replace(/[$,\s]/g, ''));
+  if (!Number.isFinite(amount)) return normalized;
+  return `$${amount.toLocaleString('es-MX', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })}`;
+}
+
 function buildAnthropicPrompt(fields, ramoFields, ramoLabel, subramoLabel) {
   const layoutGuide = fields.map((field, index) => `${index}. ${field.d || field.k}`).join('\n');
   const ramoGuide = ramoFields
@@ -735,6 +746,11 @@ function App() {
   const polizaAttachments = captureFiles.filter((file) => file.cat === 'poliza');
   const reciboAttachments = captureFiles.filter((file) => file.cat === 'recibo');
   const otrosAttachments = captureFiles.filter((file) => file.cat === 'otros');
+  const showDocumentsBlock =
+    Boolean(normalizeText(capture.vendedor)) &&
+    Boolean(normalizeText(capture.asegurado)) &&
+    Boolean(normalizeText(capture.ramo));
+  const showExtractionBlocks = Boolean(capture.extracted);
   const showCaptureContextCombos = true;
 
   async function handleLogin(event) {
@@ -1504,7 +1520,9 @@ function App() {
                       vendedor: '',
                       asegurado: '',
                       ramo: '',
-                      subramo: ''
+                      subramo: '',
+                      vendedorId: '',
+                      extracted: false
                     }))
                   }
                 />
@@ -1518,15 +1536,16 @@ function App() {
                   hint={`${gerenciaOptions.length} opciones`}
                   disabled={!capture.linea}
                   onSelect={(value) =>
-                  setCapture((current) => ({
-                    ...current,
-                    gerencia: value,
-                    vendedor: '',
-                    vendedorId: '',
-                    asegurado: ''
-                  }))
-                }
-              />
+                    setCapture((current) => ({
+                      ...current,
+                      gerencia: value,
+                      vendedor: '',
+                      vendedorId: '',
+                      asegurado: '',
+                      extracted: false
+                    }))
+                  }
+                />
               ) : null}
               <ComboField
                 label="Vendedor"
@@ -1544,7 +1563,8 @@ function App() {
                     ...current,
                     vendedor: value,
                     vendedorId: selectedVendor?.IdVendedor ? String(selectedVendor.IdVendedor) : '',
-                    asegurado: ''
+                    asegurado: '',
+                    extracted: false
                   }));
                 }}
               />
@@ -1572,7 +1592,8 @@ function App() {
                 onSelect={(value) =>
                   setCapture((current) => ({
                     ...current,
-                    asegurado: value
+                    asegurado: value,
+                    extracted: false
                   }))
                 }
                 actionLabel={(query) =>
@@ -1592,7 +1613,8 @@ function App() {
                     ...current,
                     ramo: value,
                     subramo: '',
-                    ramoData: {}
+                    ramoData: {},
+                    extracted: false
                   }))
                 }
               />
@@ -1604,7 +1626,13 @@ function App() {
                   placeholder={subramosLoading ? 'Cargando subramos...' : 'Selecciona el subramo'}
                   hint={subramosLoading ? 'Cargando subramos...' : `${subramoOptions.length} opciones`}
                   disabled={subramosLoading || !subramoOptions.length}
-                  onSelect={(value) => setCapture((current) => ({ ...current, subramo: value }))}
+                  onSelect={(value) =>
+                    setCapture((current) => ({
+                      ...current,
+                      subramo: value,
+                      extracted: false
+                    }))
+                  }
                 />
               ) : null}
             </div>
@@ -1614,159 +1642,167 @@ function App() {
             </div>
           </Card>
 
-          <Card
-            badge="2"
-            title="Documentos de respaldo"
-            subtitle="Carga la póliza principal, el recibo y otros archivos"
-            headAlign="left"
-          >
-            <div className="file-grid">
-              <FileUploadCard
-                title="Subir póliza"
-                help="PDF, JPG o PNG · 1 archivo"
-                category="poliza"
-                items={polizaAttachments}
-                maxFiles={1}
-                accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
-                multiple={false}
-                onAddFiles={addFiles}
-                onRemoveFile={removeFileByRef}
-              />
-              <FileUploadCard
-                title="Subir recibo"
-                help="PDF, JPG o PNG · 1 archivo"
-                category="recibo"
-                items={reciboAttachments}
-                maxFiles={1}
-                accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
-                multiple={false}
-                onAddFiles={addFiles}
-                onRemoveFile={removeFileByRef}
-              />
-              <FileUploadCard
-                title="Subir otros"
-                help="PDF, JPG o PNG · hasta 3 archivos"
-                category="otros"
-                items={otrosAttachments}
-                maxFiles={3}
-                accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
-                multiple
-                onAddFiles={addFiles}
-                onRemoveFile={removeFileByRef}
-              />
-            </div>
-            <div className="actions-row">
-              <button
-                type="button"
-                className="primary-button"
-                onClick={readCaptureDocument}
-                disabled={!polizaFiles.length || readingDocument}
-              >
-                {readingDocument ? 'Leyendo...' : 'Leer póliza'}
-              </button>
-            </div>
-          </Card>
-
-          <Card title="Resumen de prima" subtitle="Revisa importes antes de guardar">
-            <div className="premium-summary">
-              <div className="premium-row">
-                <span>Prima neta</span>
-                <input type="text" value={summary.primaNeta || capture.ramoData?.prima_neta || ''} readOnly />
-              </div>
-              <div className="premium-row">
-                <span>Tasa financiamiento</span>
-                <input type="text" value={summary.tasaFinanciamiento || capture.ramoData?.tasa_financiamiento || ''} readOnly />
-              </div>
-              <div className="premium-row">
-                <span>Gastos por expedición</span>
-                <input type="text" value={summary.gastosExpedicion || capture.ramoData?.gastos_expedicion || ''} readOnly />
-              </div>
-              <div className="premium-row">
-                <span>Descuentos</span>
-                <input type="text" value={summary.descuentos || capture.ramoData?.descuentos || ''} readOnly />
-              </div>
-              <div className="premium-row">
-                <span>Recargos</span>
-                <input type="text" value={summary.recargos || capture.ramoData?.recargos || ''} readOnly />
-              </div>
-              <div className="premium-row">
-                <span>Derechos</span>
-                <input type="text" value={summary.derechos || capture.ramoData?.derechos || ''} readOnly />
-              </div>
-              <div className="premium-row">
-                <span>Ajuste</span>
-                <input type="text" value={summary.ajuste || capture.ramoData?.ajuste || ''} readOnly />
-              </div>
-              <div className="premium-row">
-                <span>Otros cargos</span>
-                <input type="text" value={summary.otrosCargos || capture.ramoData?.otros_cargos || ''} readOnly />
-              </div>
-              <div className="premium-row premium-subtotal">
-                <span>Subtotal</span>
-                <strong>{summary.subtotal !== null ? formatMoney(summary.subtotal) : '—'}</strong>
-              </div>
-              <div className="premium-row">
-                <span>I.V.A.</span>
-                <input type="text" value={summary.iva || capture.ramoData?.iva || ''} readOnly />
-              </div>
-              <div className="premium-total">
-                <span>Importe total</span>
-                <strong>{summary.total !== null ? formatMoney(summary.total) : '—'}</strong>
-              </div>
-            </div>
-            <div className="warning-box">
-              Revisa que prima neta, recargos, derechos, ajuste, otros cargos, gastos, descuento, IVA y total cuadren antes de guardar.
-            </div>
-          </Card>
-
-          {captureSchema ? (
+          {showDocumentsBlock ? (
             <Card
-              title={`Datos del ramo${selectedRamoLabel ? ` · ${selectedRamoLabel}` : ''}${showSubramo && selectedSubramoLabel ? ` / ${selectedSubramoLabel}` : ''}`}
-              subtitle="Completa la información específica del ramo"
+              badge="2"
+              title="Documentos de respaldo"
+              subtitle="Carga la póliza principal, el recibo y otros archivos"
+              headAlign="left"
             >
-              <div className="ramo-grid">
-                {(captureSchema.main || []).map(([key, label]) => (
-                  <div className="mini-field" key={`main-${key}`}>
-                    <label>{label}</label>
-                    <input
-                      type="text"
-                      value={capture.ramoData?.[key] || ''}
-                      onChange={(event) => updateRamoData(key, event.target.value)}
-                    />
-                  </div>
-                ))}
+              <div className="file-grid">
+                <FileUploadCard
+                  title="Subir póliza"
+                  help="PDF, JPG o PNG · 1 archivo"
+                  category="poliza"
+                  items={polizaAttachments}
+                  maxFiles={1}
+                  accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                  multiple={false}
+                  onAddFiles={addFiles}
+                  onRemoveFile={removeFileByRef}
+                />
+                <FileUploadCard
+                  title="Subir recibo"
+                  help="PDF, JPG o PNG · 1 archivo"
+                  category="recibo"
+                  items={reciboAttachments}
+                  maxFiles={1}
+                  accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                  multiple={false}
+                  onAddFiles={addFiles}
+                  onRemoveFile={removeFileByRef}
+                />
+                <FileUploadCard
+                  title="Subir otros"
+                  help="PDF, JPG o PNG · hasta 3 archivos"
+                  category="otros"
+                  items={otrosAttachments}
+                  maxFiles={3}
+                  accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                  multiple
+                  onAddFiles={addFiles}
+                  onRemoveFile={removeFileByRef}
+                />
               </div>
-              <div className="ramo-grid full">
-                {(captureSchema.full || []).map(([key, label]) => (
-                  <div className="mini-field" key={`full-${key}`}>
-                    <label>{label}</label>
-                    <input
-                      type="text"
-                      value={capture.ramoData?.[key] || ''}
-                      onChange={(event) => updateRamoData(key, event.target.value)}
-                    />
-                  </div>
-                ))}
+              <div className="actions-row">
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={readCaptureDocument}
+                  disabled={!polizaFiles.length || readingDocument}
+                >
+                  {readingDocument ? 'Leyendo...' : 'Leer póliza'}
+                </button>
               </div>
             </Card>
           ) : null}
 
-          <Card title="Formulario de póliza" subtitle="Datos extraídos para validar la captura" headAlign="left">
-            <SectionFields
-              sections={sections}
-              fields={fields}
-              layout={capture.layout}
-              onChange={updateLayout}
-            />
-            <div className="actions-row">
-              <button type="button" className="secondary-button" onClick={savePoliza}>
-                Guardar póliza
-              </button>
-              <button type="button" className="ghost-button" onClick={resetCapture}>
-                Limpiar
-              </button>
-            </div>
-          </Card>
+          {showExtractionBlocks ? (
+            <>
+              <Card title="Resumen de prima" subtitle="Revisa importes antes de guardar">
+                <div className="premium-summary">
+                  <div className="premium-row">
+                    <span>Prima neta</span>
+                    <input
+                      type="text"
+                      value={formatSummaryCurrency(summary.primaNeta || capture.ramoData?.prima_neta || '')}
+                      readOnly
+                    />
+                  </div>
+                  <div className="premium-row">
+                    <span>Tasa financiamiento</span>
+                    <input
+                      type="text"
+                      value={formatSummaryCurrency(
+                        summary.tasaFinanciamiento || capture.ramoData?.tasa_financiamiento || ''
+                      )}
+                      readOnly
+                    />
+                  </div>
+                  <div className="premium-row">
+                    <span>Gastos por expedición</span>
+                    <input
+                      type="text"
+                      value={formatSummaryCurrency(
+                        summary.gastosExpedicion || capture.ramoData?.gastos_expedicion || ''
+                      )}
+                      readOnly
+                    />
+                  </div>
+                  <div className="premium-row">
+                    <span>Descuentos</span>
+                    <input
+                      type="text"
+                      value={formatSummaryCurrency(summary.descuentos || capture.ramoData?.descuentos || '')}
+                      readOnly
+                    />
+                  </div>
+                  <div className="premium-row premium-subtotal">
+                    <span>Subtotal</span>
+                    <strong>{formatSummaryCurrency(summary.subtotal)}</strong>
+                  </div>
+                  <div className="premium-row">
+                    <span>I.V.A.</span>
+                    <input type="text" value={formatSummaryCurrency(summary.iva || capture.ramoData?.iva || '')} readOnly />
+                  </div>
+                  <div className="premium-total">
+                    <span>Importe total</span>
+                    <strong>{formatSummaryCurrency(summary.total)}</strong>
+                  </div>
+                </div>
+                <div className="warning-box">Revisa que prima neta, gastos, descuento, IVA, subtotal y total cuadren antes de guardar.</div>
+              </Card>
+
+              {captureSchema ? (
+                <Card
+                  title={`Datos del ramo${selectedRamoLabel ? ` · ${selectedRamoLabel}` : ''}${showSubramo && selectedSubramoLabel ? ` / ${selectedSubramoLabel}` : ''}`}
+                  subtitle="Completa la información específica del ramo"
+                >
+                  <div className="ramo-grid">
+                    {(captureSchema.main || []).map(([key, label]) => (
+                      <div className="mini-field" key={`main-${key}`}>
+                        <label>{label}</label>
+                        <input
+                          type="text"
+                          value={capture.ramoData?.[key] || ''}
+                          onChange={(event) => updateRamoData(key, event.target.value)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                  <div className="ramo-grid full">
+                    {(captureSchema.full || []).map(([key, label]) => (
+                      <div className="mini-field" key={`full-${key}`}>
+                        <label>{label}</label>
+                        <input
+                          type="text"
+                          value={capture.ramoData?.[key] || ''}
+                          onChange={(event) => updateRamoData(key, event.target.value)}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </Card>
+              ) : null}
+
+              <Card title="Formulario de póliza" subtitle="Datos extraídos para validar la captura" headAlign="left">
+                <SectionFields
+                  sections={sections}
+                  fields={fields}
+                  layout={capture.layout}
+                  onChange={updateLayout}
+                />
+                <div className="actions-row">
+                  <button type="button" className="secondary-button" onClick={savePoliza}>
+                    Guardar póliza
+                  </button>
+                  <button type="button" className="ghost-button" onClick={resetCapture}>
+                    Limpiar
+                  </button>
+                </div>
+              </Card>
+            </>
+          ) : null}
           </div>
         ) : null}
 
