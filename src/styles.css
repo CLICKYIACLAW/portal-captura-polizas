@@ -834,6 +834,24 @@ a {
   padding: 0 0 18px;
 }
 
+.section-card .fields-grid > .form-divider {
+  grid-column: 1 / -1;
+  margin-top: 4px;
+}
+
+.section-card .mini-field label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.section-card .mini-field label .pill {
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  font-size: 0.62rem;
+}
+
 .badge,
 .pill {
   display: inline-flex;
@@ -1114,9 +1132,11 @@ a {
   .combo-grid,
   .ramo-grid,
   .summary-grid,
-  .file-grid,
-  .section-card .fields-grid {
+  .file-grid {
     grid-template-columns: 1fr;
+  }
+  .section-card .fields-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .topbar {
     flex-direction: column;
@@ -1159,6 +1179,14 @@ a {
   }
   .tab {
     padding: 10px 14px;
+  }
+
+  .section-card .fields-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .section-card .mini-field.span-2 {
+    grid-column: 1 / -1;
   }
 
   .login-card {
