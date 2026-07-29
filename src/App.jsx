@@ -21,6 +21,7 @@ import {
 } from './lib/polizaLayout';
 import legacyBootstrap from '../storage/bootstrap.json';
 import {
+  applyAssignmentSelection,
   countFilled,
   fileToBase64,
   formatDateTime,
@@ -80,7 +81,8 @@ function emptyCapture(length = POLIZA_LAYOUT_FIELDS.length) {
     ramoData: {},
     files: [],
     extracted: false,
-    confirmed: false
+    confirmed: false,
+    documentsInvalidated: false
   };
 }
 
@@ -1060,6 +1062,13 @@ function App() {
   }, [capture.layout, capture.ramoData]);
 
   const matchResult = useMemo(() => {
+    if (capture.documentsInvalidated) {
+      return {
+        tone: 'warning',
+        message:
+          'Se eliminaron los documentos porque cambió la asignación. Carga una póliza que corresponda a la nueva asignación.'
+      };
+    }
     if (!capture.extracted) return { tone: 'neutral', message: 'Aún no se ejecuta lectura asistida.' };
     const candidate = extractedAseguradoName;
     if (!candidate || !capture.asegurado) {
@@ -1528,18 +1537,22 @@ function App() {
                   placeholder="Selecciona la línea"
                   hint={`${lineOptions.length} opciones`}
                   onSelect={(value) =>
-                    setCapture((current) => ({
-                      ...current,
-                      linea: value,
-                      gerencia: '',
-                      vendedor: '',
-                      asegurado: '',
-                      ramo: '',
-                      subramo: '',
-                      vendedorId: '',
-                      extracted: false,
-                      confirmed: false
-                    }))
+                    setCapture((current) =>
+                      applyAssignmentSelection(
+                        current,
+                        'linea',
+                        value,
+                        {
+                          gerencia: '',
+                          vendedor: '',
+                          asegurado: '',
+                          ramo: '',
+                          subramo: '',
+                          vendedorId: ''
+                        },
+                        POLIZA_LAYOUT_FIELDS.length
+                      )
+                    )
                   }
                 />
               ) : null}
@@ -1552,15 +1565,19 @@ function App() {
                   hint={`${gerenciaOptions.length} opciones`}
                   disabled={!capture.linea}
                   onSelect={(value) =>
-                    setCapture((current) => ({
-                      ...current,
-                      gerencia: value,
-                      vendedor: '',
-                      vendedorId: '',
-                      asegurado: '',
-                      extracted: false,
-                      confirmed: false
-                    }))
+                    setCapture((current) =>
+                      applyAssignmentSelection(
+                        current,
+                        'gerencia',
+                        value,
+                        {
+                          vendedor: '',
+                          vendedorId: '',
+                          asegurado: ''
+                        },
+                        POLIZA_LAYOUT_FIELDS.length
+                      )
+                    )
                   }
                 />
               ) : null}
@@ -1576,14 +1593,18 @@ function App() {
                     (option) => normalizeText(option.Valor ?? option.Texto ?? '') === normalizeText(value)
                   );
 
-                  setCapture((current) => ({
-                    ...current,
-                    vendedor: value,
-                    vendedorId: selectedVendor?.IdVendedor ? String(selectedVendor.IdVendedor) : '',
-                    asegurado: '',
-                    extracted: false,
-                    confirmed: false
-                  }));
+                  setCapture((current) =>
+                    applyAssignmentSelection(
+                      current,
+                      'vendedor',
+                      value,
+                      {
+                        vendedorId: selectedVendor?.IdVendedor ? String(selectedVendor.IdVendedor) : '',
+                        asegurado: ''
+                      },
+                      POLIZA_LAYOUT_FIELDS.length
+                    )
+                  );
                 }}
               />
               <ComboField
@@ -1608,12 +1629,9 @@ function App() {
                 }
                 disabled={aseguradosLoading || !selectedVendorId || !aseguradoCatalog.length}
                 onSelect={(value) =>
-                  setCapture((current) => ({
-                    ...current,
-                    asegurado: value,
-                    extracted: false,
-                    confirmed: false
-                  }))
+                  setCapture((current) =>
+                    applyAssignmentSelection(current, 'asegurado', value, {}, POLIZA_LAYOUT_FIELDS.length)
+                  )
                 }
                 actionLabel={(query) =>
                   query ? `Dar de alta a «${query}»` : 'Dar de alta a un asegurado nuevo'
@@ -1628,14 +1646,18 @@ function App() {
                 hint={ramosLoading ? 'Cargando ramos...' : `${ramoOptions.length} opciones`}
                 disabled={ramosLoading || !ramoOptions.length}
                 onSelect={(value) =>
-                  setCapture((current) => ({
-                    ...current,
-                    ramo: value,
-                    subramo: '',
-                    ramoData: {},
-                    extracted: false,
-                    confirmed: false
-                  }))
+                  setCapture((current) =>
+                    applyAssignmentSelection(
+                      current,
+                      'ramo',
+                      value,
+                      {
+                        subramo: '',
+                        ramoData: {}
+                      },
+                      POLIZA_LAYOUT_FIELDS.length
+                    )
+                  )
                 }
               />
               {showSubramo ? (
@@ -1647,12 +1669,9 @@ function App() {
                   hint={subramosLoading ? 'Cargando subramos...' : `${subramoOptions.length} opciones`}
                   disabled={subramosLoading || !subramoOptions.length}
                   onSelect={(value) =>
-                    setCapture((current) => ({
-                      ...current,
-                      subramo: value,
-                      extracted: false,
-                      confirmed: false
-                    }))
+                    setCapture((current) =>
+                      applyAssignmentSelection(current, 'subramo', value, {}, POLIZA_LAYOUT_FIELDS.length)
+                    )
                   }
                 />
               ) : null}
@@ -1676,7 +1695,12 @@ function App() {
                   maxFiles={1}
                   accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
                   multiple={false}
-                  onAddFiles={addFiles}
+                  onAddFiles={(category, fileList, maxCount) => {
+                    if (category === 'poliza' && Array.from(fileList || []).length > 0) {
+                      setCapture((current) => ({ ...current, documentsInvalidated: false }));
+                    }
+                    addFiles(category, fileList, maxCount);
+                  }}
                   onRemoveFile={removeFileByRef}
                 />
                 <FileUploadCard

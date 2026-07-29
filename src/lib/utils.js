@@ -1,3 +1,55 @@
+export function normalizeAssignmentValue(value) {
+  return value == null ? '' : String(value).trim();
+}
+
+export function classifyAssignmentTransition(previousValue, nextValue) {
+  const previous = normalizeAssignmentValue(previousValue);
+  const next = normalizeAssignmentValue(nextValue);
+  if (next === '' || previous === next) return 'ignore';
+  if (previous === '') return 'initial';
+  return 'change';
+}
+
+export function applyAssignmentSelection(
+  current,
+  field,
+  nextValue,
+  dependentPatch = {},
+  layoutLength = 0
+) {
+  const transition = classifyAssignmentTransition(current[field], nextValue);
+  if (transition === 'ignore') return current;
+
+  const base = {
+    ...current,
+    [field]: nextValue,
+    ...dependentPatch
+  };
+
+  if (transition === 'initial') {
+    return base;
+  }
+
+  const hadDocuments = (current.files || []).length > 0;
+  const hadReadState =
+    Boolean(current.extracted) ||
+    Boolean(current.aseguradora) ||
+    Boolean(current.poliza) ||
+    Object.keys(current.ramoData || {}).length > 0;
+
+  return {
+    ...base,
+    files: [],
+    aseguradora: '',
+    poliza: '',
+    layout: Array(layoutLength).fill(''),
+    ramoData: {},
+    extracted: false,
+    confirmed: false,
+    documentsInvalidated: current.documentsInvalidated || hadDocuments || hadReadState
+  };
+}
+
 export function normalizeText(value) {
   return String(value ?? '').trim().replace(/\s+/g, ' ');
 }
