@@ -18,7 +18,9 @@ import {
   POLIZA_LAYOUT_FIELDS,
   POLIZA_LAYOUT_INDEX_BY_KEY,
   POLIZA_LAYOUT_SECTIONS,
-  POLIZA_LAYOUT_DISPLAY_SECTIONS
+  POLIZA_LAYOUT_DISPLAY_SECTIONS,
+  buildExtractionFieldGuide,
+  mapExtractedFieldsToLayout
 } from './lib/polizaLayout';
 import legacyBootstrap from '../storage/bootstrap.json';
 import {
@@ -558,12 +560,9 @@ function formatSummaryCurrency(value) {
 }
 
 function buildAnthropicPrompt(fields, sections, ramoLabel, subramoLabel) {
-  const layoutGuide = sections
-    .map(([section, indexes]) => {
-      const sectionFields = (indexes || []).map((fieldIndex) => `- ${fields[fieldIndex]?.d || fields[fieldIndex]?.k}`).join('\n');
-      return `${section}:\n${sectionFields}`;
-    })
-    .join('\n\n');
+  const layoutGuide = buildExtractionFieldGuide(fields)
+    .map(({ key, section, label }) => `- ${key} | ${section} | ${label}`)
+    .join('\n');
 
   return [
     'Analiza el documento adjunto de una póliza de seguros mexicana y extrae TODOS los datos que puedas completar en el formulario.',
@@ -576,7 +575,7 @@ function buildAnthropicPrompt(fields, sections, ramoLabel, subramoLabel) {
     '{',
     '  "aseguradora": string | null,',
     '  "poliza": string | null,',
-    '  "layout": Array<string | null> con exactamente la misma cantidad de campos del formulario,',
+    '  "campos": { "<clave exacta>": string | null },',
     '  "resumenPrimas": {',
     '    "prima_neta": string | null,',
     '    "tasa_financiamiento": string | null,',
@@ -594,7 +593,10 @@ function buildAnthropicPrompt(fields, sections, ramoLabel, subramoLabel) {
     '}',
     `Ramo seleccionado: ${ramoLabel || 'sin ramo'}`,
     `Subramo seleccionado: ${subramoLabel || 'sin subramo'}`,
-    'Campos del formulario agrupados por sección, en este orden exacto:',
+    'Usa exactamente las claves técnicas indicadas como claves JSON; no inventes claves.',
+    'Si el documento no muestra un campo, omítelo o usa null.',
+    'Nunca renumeres, reordenes ni devuelvas un arreglo posicional.',
+    'Campos extractables del formulario (clave técnica | sección | etiqueta):',
     layoutGuide || '- (sin campos)',
     'El nombre del asegurado debe colocarse en el campo "Nombre" de la sección "Asegurado".',
     'Resumen de primas: identifica y extrae todos los importes y conceptos visibles. Incluye al menos prima neta, tasa de financiamiento, gastos por expedición, descuentos, subtotal, I.V.A., importe total y cualquier otro recargo, derecho o ajuste que aparezca.',
@@ -1222,12 +1224,16 @@ function App() {
     pushToast('Leyendo póliza con Anthropic...');
     try {
       const result = await callAnthropic(file, POLIZA_LAYOUT_FIELDS, POLIZA_LAYOUT_SECTIONS, capture.ramo, capture.subramo);
-      const nextLayout = Array(POLIZA_LAYOUT_FIELDS.length).fill('');
-      if (Array.isArray(result?.layout)) {
-        result.layout.slice(0, POLIZA_LAYOUT_FIELDS.length).forEach((value, index) => {
-          nextLayout[index] = normalizeText(value);
-        });
+      const campos = result?.campos;
+      if (
+        !campos ||
+        typeof campos !== 'object' ||
+        Array.isArray(campos) ||
+        ![Object.prototype, null].includes(Object.getPrototypeOf(campos))
+      ) {
+        throw new Error('La lectura no devolvió el formato esperado. Intenta nuevamente.');
       }
+      const nextLayout = mapExtractedFieldsToLayout(campos);
       const resumenPrimas = normalizeSummaryValues(result?.resumenPrimas);
 
       setCapture((current) => ({
