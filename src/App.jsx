@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useState } from 'react';
 import appPackage from '../package.json';
 import {
   buscarEjecutivos,
@@ -17,7 +17,8 @@ import {
   POLIZA_ASEGURADO_INDEX,
   POLIZA_LAYOUT_FIELDS,
   POLIZA_LAYOUT_INDEX_BY_KEY,
-  POLIZA_LAYOUT_SECTIONS
+  POLIZA_LAYOUT_SECTIONS,
+  POLIZA_LAYOUT_DISPLAY_SECTIONS
 } from './lib/polizaLayout';
 import legacyBootstrap from '../storage/bootstrap.json';
 import {
@@ -327,10 +328,16 @@ function SectionFields({ sections, fields, layout, onChange }) {
   return (
     <div className="section-grid">
       {(sections || []).map((section, index) => {
-        const [title, indexes] = section;
-        const fieldIndexes = Array.isArray(indexes) ? indexes : [];
+        const title = section.title || section[0];
+        const fieldIndexes = Array.isArray(section.indexes)
+          ? section.indexes
+          : Array.isArray(section[1])
+            ? section[1]
+            : [];
+        const subgroups = section.subgroups || [{ title: null, indexes: fieldIndexes }];
+        const open = section.openByDefault !== undefined ? section.openByDefault : index < 2;
         return (
-          <details key={`${title}-${index}`} className="section-card" open={index < 2}>
+          <details key={`${title}-${index}`} className="section-card" open={open}>
             <summary>
               <span>{title}</span>
               <span className="badge">
@@ -338,21 +345,31 @@ function SectionFields({ sections, fields, layout, onChange }) {
               </span>
             </summary>
             <div className="fields-grid">
-              {fieldIndexes.map((absoluteIndex) => {
-                const field = fields[absoluteIndex];
-                if (!field) return null;
-                const label = field.d || field.k;
-                return (
-                  <div className="mini-field" key={`${field.k}-${absoluteIndex}`}>
-                    <label title={field.k}>{label}</label>
-                    <input
-                      type="text"
-                      value={layout[absoluteIndex] || ''}
-                      onChange={(event) => onChange(absoluteIndex, event.target.value)}
-                    />
-                  </div>
-                );
-              })}
+              {subgroups.map((group) => (
+                <Fragment key={group.title || 'all'}>
+                  {group.title ? <div className="form-divider">{group.title}</div> : null}
+                  {group.indexes.map((absoluteIndex) => {
+                    const field = fields[absoluteIndex];
+                    if (!field) return null;
+                    const label = field.d || field.k;
+                    const spanClass = field.display?.span === 2 ? 'mini-field span-2' : 'mini-field';
+                    const isManual = field.display?.availability !== 'printed';
+                    return (
+                      <div className={spanClass} key={`${field.k}-${absoluteIndex}`}>
+                        <label title={field.k}>
+                          <span>{label}</span>
+                          {isManual ? <span className="pill">Captura manual</span> : null}
+                        </label>
+                        <input
+                          type="text"
+                          value={layout[absoluteIndex] || ''}
+                          onChange={(event) => onChange(absoluteIndex, event.target.value)}
+                        />
+                      </div>
+                    );
+                  })}
+                </Fragment>
+              ))}
             </div>
           </details>
         );
@@ -1800,7 +1817,7 @@ function App() {
 
               <Card title="Formulario de póliza" subtitle="Datos extraídos para validar la captura" headAlign="left">
                 <SectionFields
-                  sections={POLIZA_LAYOUT_SECTIONS}
+                  sections={POLIZA_LAYOUT_DISPLAY_SECTIONS}
                   fields={POLIZA_LAYOUT_FIELDS}
                   layout={capture.layout}
                   onChange={updateLayout}
