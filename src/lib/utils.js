@@ -2,6 +2,16 @@ export function normalizeAssignmentValue(value) {
   return value == null ? '' : String(value).trim();
 }
 
+export function applyCaptureFieldUpdate(current, field, value) {
+  const base = current != null ? { ...current } : {};
+
+  if (field === 'confirmed') {
+    return { ...base, confirmed: Boolean(value) };
+  }
+
+  return { ...base, [field]: value, confirmed: false };
+}
+
 export function classifyAssignmentTransition(previousValue, nextValue) {
   const previous = normalizeAssignmentValue(previousValue);
   const next = normalizeAssignmentValue(nextValue);
