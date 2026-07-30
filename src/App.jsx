@@ -20,7 +20,9 @@ import {
   POLIZA_LAYOUT_SECTIONS,
   POLIZA_LAYOUT_DISPLAY_SECTIONS,
   buildExtractionFieldGuide,
-  mapExtractedFieldsToLayout
+  mapExtractedFieldsToLayout,
+  applyCompanyFallback,
+  buildDataSummaryRows
 } from './lib/polizaLayout';
 import legacyBootstrap from '../storage/bootstrap.json';
 import {
@@ -1234,7 +1236,7 @@ function App() {
       ) {
         throw new Error('La lectura no devolvió el formato esperado. Intenta nuevamente.');
       }
-      const nextLayout = mapExtractedFieldsToLayout(campos);
+      const nextLayout = applyCompanyFallback(mapExtractedFieldsToLayout(campos), result?.aseguradora);
       const resumenPrimas = normalizeSummaryValues(result?.resumenPrimas);
 
       setCapture((current) => ({
@@ -1768,6 +1770,17 @@ function App() {
 
           {showExtractionBlocks ? (
             <>
+              <Card title="Resumen de datos" subtitle="Validación rápida contra el documento">
+                <div className="summary-grid">
+                  {buildDataSummaryRows(capture.layout).map(({ label, value }) => (
+                    <div key={label}>
+                      <span>{label}</span>
+                      <strong>{value}</strong>
+                    </div>
+                  ))}
+                </div>
+              </Card>
+
               <Card title="Resumen de prima" subtitle="Revisa importes antes de guardar">
                 <div className="premium-summary">
                   <div className="premium-row">
