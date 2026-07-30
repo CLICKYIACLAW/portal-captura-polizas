@@ -1194,3 +1194,9 @@ a {
     border-radius: 20px;
   }
 }
+
+.section-card .mini-field input[readonly] {
+  background: var(--bg-soft);
+  cursor: default;
+}
+
