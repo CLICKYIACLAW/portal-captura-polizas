@@ -352,7 +352,7 @@ function SectionFields({ sections, fields, layout, onChange }) {
                   {group.title ? <div className="form-divider">{group.title}</div> : null}
                   {group.indexes.map((absoluteIndex) => {
                     const field = fields[absoluteIndex];
-                    if (!field) return null;
+                    if (!field || field.display?.hidden) return null;
                     const label = field.d || field.k;
                     const spanClass = field.display?.span === 2 ? 'mini-field span-2' : 'mini-field';
                     const isManual = field.display?.availability !== 'printed';
@@ -364,6 +364,7 @@ function SectionFields({ sections, fields, layout, onChange }) {
                         </label>
                         <input
                           type="text"
+                          readOnly
                           value={layout[absoluteIndex] || ''}
                           onChange={(event) => onChange(absoluteIndex, event.target.value)}
                         />
