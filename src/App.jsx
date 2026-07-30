@@ -22,7 +22,9 @@ import {
   buildExtractionFieldGuide,
   mapExtractedFieldsToLayout,
   applyCompanyFallback,
-  buildDataSummaryRows
+  buildDataSummaryRows,
+  applyDerivedAddressFields,
+  buildFieldNotes
 } from './lib/polizaLayout';
 import legacyBootstrap from '../storage/bootstrap.json';
 import {
@@ -83,6 +85,7 @@ function emptyCapture(length = POLIZA_LAYOUT_FIELDS.length) {
     aseguradora: '',
     poliza: '',
     layout: Array(length).fill(''),
+    derivedFields: [],
     ramoData: {},
     files: [],
     extracted: false,
@@ -328,7 +331,7 @@ function TabIcon({ tabId }) {
   }
 }
 
-function SectionFields({ sections, fields, layout, onChange }) {
+function SectionFields({ sections, fields, layout, onChange, notes = {} }) {
   return (
     <div className="section-grid">
       {(sections || []).map((section, index) => {
@@ -363,6 +366,9 @@ function SectionFields({ sections, fields, layout, onChange }) {
                         <label title={field.k}>
                           <span>{label}</span>
                           {isManual ? <span className="pill">Captura manual</span> : null}
+                          {notes[field.k] ? (
+                            <span className={`pill tone-${notes[field.k].tone}`}>{notes[field.k].text}</span>
+                          ) : null}
                         </label>
                         <input
                           type="text"
@@ -1083,6 +1089,11 @@ function App() {
     };
   }, [capture.layout, capture.ramoData]);
 
+  const fieldNotes = useMemo(
+    () => buildFieldNotes(capture.layout, capture.derivedFields),
+    [capture.layout, capture.derivedFields]
+  );
+
   const matchResult = useMemo(() => {
     if (capture.documentsInvalidated) {
       return {
@@ -1237,13 +1248,15 @@ function App() {
         throw new Error('La lectura no devolvió el formato esperado. Intenta nuevamente.');
       }
       const nextLayout = applyCompanyFallback(mapExtractedFieldsToLayout(campos), result?.aseguradora);
+      const { layout: derivedLayout, derived } = applyDerivedAddressFields(nextLayout);
       const resumenPrimas = normalizeSummaryValues(result?.resumenPrimas);
 
       setCapture((current) => ({
         ...current,
         aseguradora: normalizeText(result?.aseguradora) || current.aseguradora,
         poliza: normalizeText(result?.poliza) || current.poliza,
-        layout: nextLayout,
+        layout: derivedLayout,
+        derivedFields: derived,
         ramoData: {
           ...(current.ramoData || {}),
           ...resumenPrimas
@@ -1841,6 +1854,7 @@ function App() {
                   fields={POLIZA_LAYOUT_FIELDS}
                   layout={capture.layout}
                   onChange={updateLayout}
+                  notes={fieldNotes}
                 />
                 <label className="final-confirmation">
                   <input
