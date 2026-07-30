@@ -142,32 +142,45 @@ export function applyCompanyFallback(layout, aseguradora, fields = POLIZA_LAYOUT
   return next;
 }
 
-const SUMMARY_ROW_SPEC = [
-  { label: 'Nombre del asegurado', key: 'DatDoctoDetail.IDAseg' },
-  { label: 'Compañía de la póliza', key: 'DatDocumentos.CompaniaPoliza' },
-  { label: 'Número de póliza', key: 'DatDocumentos.Documento' },
-  { label: 'Marca', key: 'DatDoctoDetail.Marca' },
-  { label: 'Tipo', key: 'DatDoctoDetail.Tipo' },
-  { label: 'Clave', key: 'DatDoctoDetail.Clave' },
-  { label: 'Modelo', key: 'DatDoctoDetail.Modelo' },
-  { label: 'Serie', key: 'DatDoctoDetail.Serie' },
-  { label: 'Motor', key: 'DatDoctoDetail.Motor' }
+const DATA_SUMMARY_GROUPS_SPEC = [
+  {
+    title: 'Póliza y seguro',
+    rows: [
+      { label: 'Compañía de la póliza', key: 'DatDocumentos.CompaniaPoliza' },
+      { label: 'Número de póliza', key: 'DatDocumentos.Documento' },
+      { label: 'Nombre del asegurado', key: 'DatDoctoDetail.IDAseg' }
+    ]
+  },
+  {
+    title: 'Datos del vehículo',
+    rows: [
+      { label: 'Marca', key: 'DatDoctoDetail.Marca' },
+      { label: 'Tipo', key: 'DatDoctoDetail.Tipo' },
+      { label: 'Clave', key: 'DatDoctoDetail.Clave' },
+      { label: 'Modelo', key: 'DatDoctoDetail.Modelo' },
+      { label: 'Serie', key: 'DatDoctoDetail.Serie' },
+      { label: 'Motor', key: 'DatDoctoDetail.Motor' }
+    ]
+  }
 ];
 
-export function buildDataSummaryRows(layout, fields = POLIZA_LAYOUT_FIELDS) {
+export function buildDataSummaryGroups(layout, fields = POLIZA_LAYOUT_FIELDS) {
   const normalizedLayout = Array.isArray(layout) ? layout : [];
 
-  return SUMMARY_ROW_SPEC.map(({ label, key }) => {
-    const index =
-      fields === POLIZA_LAYOUT_FIELDS
-        ? POLIZA_LAYOUT_INDEX_BY_KEY[key]
-        : fields.findIndex((field) => field.k === key);
+  return DATA_SUMMARY_GROUPS_SPEC.map((group) => ({
+    title: group.title,
+    rows: group.rows.map(({ label, key }) => {
+      const index =
+        fields === POLIZA_LAYOUT_FIELDS
+          ? POLIZA_LAYOUT_INDEX_BY_KEY[key]
+          : fields.findIndex((field) => field.k === key);
 
-    const raw = index >= 0 && index < normalizedLayout.length ? normalizedLayout[index] : '';
-    const value = String(raw ?? '').trim();
+      const raw = index >= 0 && index < normalizedLayout.length ? normalizedLayout[index] : '';
+      const value = String(raw ?? '').trim();
 
-    return { label, value };
-  });
+      return { label, value };
+    })
+  }));
 }
 
 export function buildPolizaDisplaySections(fields = POLIZA_LAYOUT_FIELDS) {

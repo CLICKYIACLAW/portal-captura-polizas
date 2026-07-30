@@ -22,13 +22,14 @@ import {
   buildExtractionFieldGuide,
   mapExtractedFieldsToLayout,
   applyCompanyFallback,
-  buildDataSummaryRows,
+  buildDataSummaryGroups,
   applyDerivedAddressFields,
   buildFieldNotes
 } from './lib/polizaLayout';
 import legacyBootstrap from '../storage/bootstrap.json';
 import {
   applyAssignmentSelection,
+  applyCaptureFieldUpdate,
   countFilled,
   fileToBase64,
   formatDateTime,
@@ -1139,7 +1140,7 @@ function App() {
   }
 
   function updateCapture(field, value) {
-    setCapture((current) => ({ ...current, [field]: value, confirmed: false }));
+    setCapture((current) => applyCaptureFieldUpdate(current, field, value));
   }
 
   function updateLayout(index, value) {
@@ -1784,14 +1785,19 @@ function App() {
           {showExtractionBlocks ? (
             <>
               <Card title="Resumen de datos" subtitle="Validación rápida contra el documento">
-                <div className="summary-grid">
-                  {buildDataSummaryRows(capture.layout).map(({ label, value }) => (
-                    <div key={label}>
-                      <span>{label}</span>
-                      <strong>{value}</strong>
+                {buildDataSummaryGroups(capture.layout).map((group) => (
+                  <div key={group.title}>
+                    <div className="form-divider">{group.title}</div>
+                    <div className="summary-grid">
+                      {group.rows.map(({ label, value }) => (
+                        <div key={label}>
+                          <span>{label}</span>
+                          <strong>{value}</strong>
+                        </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                ))}
               </Card>
 
               <Card title="Resumen de prima" subtitle="Revisa importes antes de guardar">
