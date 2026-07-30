@@ -1,3 +1,6 @@
+import { resolveMexicanAddressFromPostalCode } from './cpPrefixEstado.js';
+import { validateRfc } from './rfc.js';
+
 const layoutFields = [
   // Póliza
   { k: 'DatDocumentos.TipoDocto', d: 'Tipo Documento', section: 'Póliza', display: { section: 'Datos de la póliza', subgroup: 'Identificación del documento', order: 26, span: 1, availability: 'printed' } },
@@ -199,3 +202,89 @@ export function buildPolizaDisplaySections(fields = POLIZA_LAYOUT_FIELDS) {
 }
 
 export const POLIZA_LAYOUT_DISPLAY_SECTIONS = buildPolizaDisplaySections();
+
+const ADDRESS_DERIVATION_BLOCKS = [
+  {
+    cp: 'DatDocumentos.IDDirCP',
+    estado: 'DatDocumentos.IDDirEstado',
+    pais: 'DatDocumentos.IDDirPais'
+  },
+  {
+    cp: 'DatDoctoDetail.IDDirCP',
+    estado: 'DatDoctoDetail.IDDirEstado',
+    pais: 'DatDoctoDetail.IDDirPais'
+  }
+];
+
+function indexByKey(key, fields) {
+  return fields === POLIZA_LAYOUT_FIELDS
+    ? POLIZA_LAYOUT_INDEX_BY_KEY[key]
+    : fields.findIndex((field) => field.k === key);
+}
+
+export function applyDerivedAddressFields(layout, fields = POLIZA_LAYOUT_FIELDS) {
+  const next = Array.isArray(layout) ? [...layout] : [];
+  const derived = [];
+
+  for (const block of ADDRESS_DERIVATION_BLOCKS) {
+    const cpIndex = indexByKey(block.cp, fields);
+    const estadoIndex = indexByKey(block.estado, fields);
+    const paisIndex = indexByKey(block.pais, fields);
+
+    if (cpIndex < 0) {
+      continue;
+    }
+
+    const cpValue = String(next[cpIndex] ?? '').trim();
+    if (!cpValue) {
+      continue;
+    }
+
+    const resolved = resolveMexicanAddressFromPostalCode(cpValue);
+    if (!resolved) {
+      continue;
+    }
+
+    if (estadoIndex >= 0 && String(next[estadoIndex] ?? '').trim() === '') {
+      next[estadoIndex] = resolved.estado;
+      derived.push(block.estado);
+    }
+
+    if (paisIndex >= 0 && String(next[paisIndex] ?? '').trim() === '') {
+      next[paisIndex] = resolved.pais;
+      derived.push(block.pais);
+    }
+  }
+
+  return { layout: next, derived };
+}
+
+export function buildFieldNotes(layout, derivedKeys, fields = POLIZA_LAYOUT_FIELDS) {
+  if (!Array.isArray(layout) || !Array.isArray(derivedKeys)) {
+    return {};
+  }
+
+  const notes = {};
+
+  for (const key of derivedKeys) {
+    notes[key] = { text: 'Valor derivado', tone: 'info' };
+  }
+
+  const rfcIndex = indexByKey('DatDocumentos.IDRFC', fields);
+  if (rfcIndex >= 0) {
+    const raw = layout[rfcIndex];
+    const rfcValue = String(raw ?? '').trim();
+    if (rfcValue) {
+      const validation = validateRfc(rfcValue);
+      if (validation.state === 'valid') {
+        notes['DatDocumentos.IDRFC'] = { text: 'RFC válido', tone: 'ok' };
+      } else if (validation.state === 'invalid') {
+        notes['DatDocumentos.IDRFC'] = { text: 'RFC inválido', tone: 'bad' };
+      } else {
+        notes['DatDocumentos.IDRFC'] = { text: 'RFC incompleto', tone: 'muted' };
+      }
+    }
+  }
+
+  return notes;
+}

@@ -870,6 +870,22 @@ a {
   color: #c2410c;
 }
 
+.pill.tone-ok {
+  background: rgba(15, 118, 110, 0.12);
+  color: var(--success);
+}
+
+.pill.tone-bad {
+  background: rgba(185, 28, 28, 0.12);
+  color: var(--danger);
+}
+
+.pill.tone-muted,
+.pill.tone-info {
+  background: rgba(107, 114, 128, 0.12);
+  color: var(--muted);
+}
+
 .summary-grid {
   margin-top: 8px;
 }
