@@ -1,58 +1,63 @@
 const layoutFields = [
   // Póliza
-  { k: 'DatDocumentos.TipoDocto', d: 'Tipo Documento', section: 'Póliza', display: { section: 'Datos de la póliza', subgroup: 'Identificación del documento', order: 24, span: 1, availability: 'printed' } },
-  { k: 'DatDocumentos.Documento', d: 'Documento', section: 'Póliza', display: { section: 'Datos de la póliza', subgroup: 'Identificación del documento', order: 25, span: 1, availability: 'printed' } },
-  { k: 'DatDocumentos.IDAgenteNum', d: 'Agente número', section: 'Póliza', display: { section: 'Datos de la póliza', subgroup: 'Datos del agente', order: 31, span: 1, availability: 'printed' } },
-  { k: 'DatDocumentos.IDAgenteNombre', d: 'Agente nombre', section: 'Póliza', display: { section: 'Datos de la póliza', subgroup: 'Datos del agente', order: 30, span: 1, availability: 'printed' } },
-  { k: 'DatDocumentos.IDFPago', d: 'Forma de Pago', section: 'Póliza', display: { section: 'Datos de la póliza', subgroup: 'Pago de la prima', order: 28, span: 1, availability: 'printed' } },
-  { k: 'DatDocumentos.IDMon', d: 'Moneda', section: 'Póliza', display: { section: 'Datos de la póliza', subgroup: 'Pago de la prima', order: 29, span: 1, availability: 'printed' } },
-  { k: 'DatDocumentos.IDSRamo', d: 'Sub Ramo', section: 'Póliza', display: { section: 'Campos administrativos', subgroup: 'Datos administrativos del documento', order: 42, span: 1, availability: 'not-printed', hidden: true } },
-  { k: 'DatDocumentos.FDesde', d: 'Inicio de Vigencia', section: 'Póliza', display: { section: 'Datos de la póliza', subgroup: 'Vigencia', order: 26, span: 1, availability: 'printed' } },
-  { k: 'DatDocumentos.FHasta', d: 'Fin de Vigencia', section: 'Póliza', display: { section: 'Datos de la póliza', subgroup: 'Vigencia', order: 27, span: 1, availability: 'printed' } },
-  { k: 'DatDocumentos.Renovacion', d: 'Renovación', section: 'Póliza', display: { section: 'Campos administrativos', subgroup: 'Datos administrativos del documento', order: 43, span: 1, availability: 'not-printed', hidden: true } },
-  { k: 'DatDocumentos.FAntiguedad', d: 'Fecha de Antigüedad', section: 'Póliza', display: { section: 'Campos administrativos', subgroup: 'Datos administrativos del documento', order: 44, span: 1, availability: 'not-printed', hidden: true } },
-  { k: 'DatDocumentos.FSolicitud', d: 'Solicitud', section: 'Póliza', display: { section: 'Campos administrativos', subgroup: 'Datos administrativos del documento', order: 45, span: 1, availability: 'not-printed', hidden: true } },
-  { k: 'DatDocumentos.Status', d: 'Estatus', section: 'Póliza', display: { section: 'Campos administrativos', subgroup: 'Datos administrativos del documento', order: 46, span: 1, availability: 'not-printed', hidden: true } },
+  { k: 'DatDocumentos.TipoDocto', d: 'Tipo Documento', section: 'Póliza', display: { section: 'Datos de la póliza', subgroup: 'Identificación del documento', order: 26, span: 1, availability: 'printed' } },
+  { k: 'DatDocumentos.Documento', d: 'Documento', section: 'Póliza', display: { section: 'Datos de la póliza', subgroup: 'Identificación del documento', order: 27, span: 1, availability: 'printed' } },
+  { k: 'DatDocumentos.IDAgenteNum', d: 'Agente número', section: 'Póliza', display: { section: 'Datos de la póliza', subgroup: 'Datos del agente', order: 33, span: 1, availability: 'printed' } },
+  { k: 'DatDocumentos.IDAgenteNombre', d: 'Agente nombre', section: 'Póliza', display: { section: 'Datos de la póliza', subgroup: 'Datos del agente', order: 32, span: 1, availability: 'printed' } },
+  { k: 'DatDocumentos.IDFPago', d: 'Forma de Pago', section: 'Póliza', display: { section: 'Datos de la póliza', subgroup: 'Pago de la prima', order: 30, span: 1, availability: 'printed' } },
+  { k: 'DatDocumentos.IDMon', d: 'Moneda', section: 'Póliza', display: { section: 'Datos de la póliza', subgroup: 'Pago de la prima', order: 31, span: 1, availability: 'printed' } },
+  { k: 'DatDocumentos.IDSRamo', d: 'Sub Ramo', section: 'Póliza', display: { section: 'Campos administrativos', subgroup: 'Datos administrativos del documento', order: 45, span: 1, availability: 'not-printed', hidden: true } },
+  { k: 'DatDocumentos.FDesde', d: 'Inicio de Vigencia', section: 'Póliza', display: { section: 'Datos de la póliza', subgroup: 'Vigencia', order: 28, span: 1, availability: 'printed' } },
+  { k: 'DatDocumentos.FHasta', d: 'Fin de Vigencia', section: 'Póliza', display: { section: 'Datos de la póliza', subgroup: 'Vigencia', order: 29, span: 1, availability: 'printed' } },
+  { k: 'DatDocumentos.Renovacion', d: 'Renovación', section: 'Póliza', display: { section: 'Campos administrativos', subgroup: 'Datos administrativos del documento', order: 46, span: 1, availability: 'not-printed', hidden: true } },
+  { k: 'DatDocumentos.FAntiguedad', d: 'Fecha de Antigüedad', section: 'Póliza', display: { section: 'Campos administrativos', subgroup: 'Datos administrativos del documento', order: 47, span: 1, availability: 'not-printed', hidden: true } },
+  { k: 'DatDocumentos.FSolicitud', d: 'Solicitud', section: 'Póliza', display: { section: 'Campos administrativos', subgroup: 'Datos administrativos del documento', order: 48, span: 1, availability: 'not-printed', hidden: true } },
+  { k: 'DatDocumentos.Status', d: 'Estatus', section: 'Póliza', display: { section: 'Campos administrativos', subgroup: 'Datos administrativos del documento', order: 49, span: 1, availability: 'not-printed', hidden: true } },
 
   // Contratante
   { k: 'DatDocumentos.IDCli', d: 'Cliente', section: 'Contratante', display: { section: 'Datos del contratante', subgroup: 'Identificación del contratante', order: 1, span: 1, availability: 'printed' } },
-  { k: 'DatDocumentos.IDDirCalle', d: 'Calle', section: 'Contratante', display: { section: 'Datos del contratante', subgroup: 'Domicilio del contratante', order: 2, span: 1, availability: 'printed' } },
-  { k: 'DatDocumentos.IDDirNumExt', d: 'Num ext.', section: 'Contratante', display: { section: 'Datos del contratante', subgroup: 'Domicilio del contratante', order: 3, span: 1, availability: 'printed' } },
-  { k: 'DatDocumentos.IDDirNumInt', d: 'Num int.', section: 'Contratante', display: { section: 'Datos del contratante', subgroup: 'Domicilio del contratante', order: 4, span: 1, availability: 'printed' } },
-  { k: 'DatDocumentos.IDDirCP', d: 'Código postal', section: 'Contratante', display: { section: 'Datos del contratante', subgroup: 'Domicilio del contratante', order: 9, span: 1, availability: 'printed' } },
-  { k: 'DatDocumentos.IDDirColonia', d: 'Colonia', section: 'Contratante', display: { section: 'Datos del contratante', subgroup: 'Domicilio del contratante', order: 5, span: 1, availability: 'printed' } },
-  { k: 'DatDocumentos.IDDirDelegacion', d: 'Delegación', section: 'Contratante', display: { section: 'Datos del contratante', subgroup: 'Domicilio del contratante', order: 7, span: 1, availability: 'printed' } },
-  { k: 'DatDocumentos.IDDirEstado', d: 'Estado', section: 'Contratante', display: { section: 'Datos del contratante', subgroup: 'Domicilio del contratante', order: 8, span: 1, availability: 'printed' } },
-  { k: 'DatDocumentos.IDDirCiudad', d: 'Ciudad', section: 'Contratante', display: { section: 'Datos del contratante', subgroup: 'Domicilio del contratante', order: 6, span: 1, availability: 'printed' } },
-  { k: 'DatDocumentos.IDDirPais', d: 'País', section: 'Contratante', display: { section: 'Datos del contratante', subgroup: 'Domicilio del contratante', order: 10, span: 1, availability: 'printed' } },
-  { k: 'DatDocumentos.IDGrupo', d: 'Grupo', section: 'Contratante', display: { section: 'Campos administrativos', subgroup: 'Datos administrativos del documento', order: 47, span: 1, availability: 'not-printed', hidden: true } },
+  { k: 'DatDocumentos.IDDirCalle', d: 'Calle', section: 'Contratante', display: { section: 'Datos del contratante', subgroup: 'Domicilio del contratante', order: 3, span: 1, availability: 'printed' } },
+  { k: 'DatDocumentos.IDDirNumExt', d: 'Num ext.', section: 'Contratante', display: { section: 'Datos del contratante', subgroup: 'Domicilio del contratante', order: 4, span: 1, availability: 'printed' } },
+  { k: 'DatDocumentos.IDDirNumInt', d: 'Num int.', section: 'Contratante', display: { section: 'Datos del contratante', subgroup: 'Domicilio del contratante', order: 5, span: 1, availability: 'printed' } },
+  { k: 'DatDocumentos.IDDirCP', d: 'Código postal', section: 'Contratante', display: { section: 'Datos del contratante', subgroup: 'Domicilio del contratante', order: 10, span: 1, availability: 'printed' } },
+  { k: 'DatDocumentos.IDDirColonia', d: 'Colonia', section: 'Contratante', display: { section: 'Datos del contratante', subgroup: 'Domicilio del contratante', order: 6, span: 1, availability: 'printed' } },
+  { k: 'DatDocumentos.IDDirDelegacion', d: 'Delegación', section: 'Contratante', display: { section: 'Datos del contratante', subgroup: 'Domicilio del contratante', order: 8, span: 1, availability: 'printed' } },
+  { k: 'DatDocumentos.IDDirEstado', d: 'Estado', section: 'Contratante', display: { section: 'Datos del contratante', subgroup: 'Domicilio del contratante', order: 9, span: 1, availability: 'printed' } },
+  { k: 'DatDocumentos.IDDirCiudad', d: 'Ciudad', section: 'Contratante', display: { section: 'Datos del contratante', subgroup: 'Domicilio del contratante', order: 7, span: 1, availability: 'printed' } },
+  { k: 'DatDocumentos.IDDirPais', d: 'País', section: 'Contratante', display: { section: 'Datos del contratante', subgroup: 'Domicilio del contratante', order: 11, span: 1, availability: 'printed' } },
+  { k: 'DatDocumentos.IDGrupo', d: 'Grupo', section: 'Contratante', display: { section: 'Campos administrativos', subgroup: 'Datos administrativos del documento', order: 50, span: 1, availability: 'not-printed', hidden: true } },
 
   // Asegurado
-  { k: 'DatDoctoDetail.IDAseg', d: 'Nombre', section: 'Asegurado', display: { section: 'Datos del asegurado', subgroup: 'Identificación del asegurado', order: 32, span: 1, availability: 'printed' } },
-  { k: 'DatDoctoDetail.IDDirCalle', d: 'Calle', section: 'Asegurado', display: { section: 'Datos del asegurado', subgroup: 'Domicilio del asegurado', order: 33, span: 1, availability: 'printed' } },
-  { k: 'DatDoctoDetail.IDDirNumExt', d: 'Num ext.', section: 'Asegurado', display: { section: 'Datos del asegurado', subgroup: 'Domicilio del asegurado', order: 34, span: 1, availability: 'printed' } },
-  { k: 'DatDoctoDetail.IDDirNumInt', d: 'Num int.', section: 'Asegurado', display: { section: 'Datos del asegurado', subgroup: 'Domicilio del asegurado', order: 35, span: 1, availability: 'printed' } },
-  { k: 'DatDoctoDetail.IDDirCP', d: 'Código postal', section: 'Asegurado', display: { section: 'Datos del asegurado', subgroup: 'Domicilio del asegurado', order: 40, span: 1, availability: 'printed' } },
-  { k: 'DatDoctoDetail.IDDirColonia', d: 'Colonia', section: 'Asegurado', display: { section: 'Datos del asegurado', subgroup: 'Domicilio del asegurado', order: 36, span: 1, availability: 'printed' } },
-  { k: 'DatDoctoDetail.IDDirDelegacion', d: 'Delegación', section: 'Asegurado', display: { section: 'Datos del asegurado', subgroup: 'Domicilio del asegurado', order: 38, span: 1, availability: 'printed' } },
-  { k: 'DatDoctoDetail.IDDirEstado', d: 'Estado', section: 'Asegurado', display: { section: 'Datos del asegurado', subgroup: 'Domicilio del asegurado', order: 39, span: 1, availability: 'printed' } },
-  { k: 'DatDoctoDetail.IDDirCiudad', d: 'Ciudad', section: 'Asegurado', display: { section: 'Datos del asegurado', subgroup: 'Domicilio del asegurado', order: 37, span: 1, availability: 'printed' } },
-  { k: 'DatDoctoDetail.IDDirPais', d: 'País', section: 'Asegurado', display: { section: 'Datos del asegurado', subgroup: 'Domicilio del asegurado', order: 41, span: 1, availability: 'printed' } },
+  { k: 'DatDoctoDetail.IDAseg', d: 'Nombre', section: 'Asegurado', display: { section: 'Datos del asegurado', subgroup: 'Identificación del asegurado', order: 35, span: 1, availability: 'printed' } },
+  { k: 'DatDoctoDetail.IDDirCalle', d: 'Calle', section: 'Asegurado', display: { section: 'Datos del asegurado', subgroup: 'Domicilio del asegurado', order: 36, span: 1, availability: 'printed' } },
+  { k: 'DatDoctoDetail.IDDirNumExt', d: 'Num ext.', section: 'Asegurado', display: { section: 'Datos del asegurado', subgroup: 'Domicilio del asegurado', order: 37, span: 1, availability: 'printed' } },
+  { k: 'DatDoctoDetail.IDDirNumInt', d: 'Num int.', section: 'Asegurado', display: { section: 'Datos del asegurado', subgroup: 'Domicilio del asegurado', order: 38, span: 1, availability: 'printed' } },
+  { k: 'DatDoctoDetail.IDDirCP', d: 'Código postal', section: 'Asegurado', display: { section: 'Datos del asegurado', subgroup: 'Domicilio del asegurado', order: 43, span: 1, availability: 'printed' } },
+  { k: 'DatDoctoDetail.IDDirColonia', d: 'Colonia', section: 'Asegurado', display: { section: 'Datos del asegurado', subgroup: 'Domicilio del asegurado', order: 39, span: 1, availability: 'printed' } },
+  { k: 'DatDoctoDetail.IDDirDelegacion', d: 'Delegación', section: 'Asegurado', display: { section: 'Datos del asegurado', subgroup: 'Domicilio del asegurado', order: 41, span: 1, availability: 'printed' } },
+  { k: 'DatDoctoDetail.IDDirEstado', d: 'Estado', section: 'Asegurado', display: { section: 'Datos del asegurado', subgroup: 'Domicilio del asegurado', order: 42, span: 1, availability: 'printed' } },
+  { k: 'DatDoctoDetail.IDDirCiudad', d: 'Ciudad', section: 'Asegurado', display: { section: 'Datos del asegurado', subgroup: 'Domicilio del asegurado', order: 40, span: 1, availability: 'printed' } },
+  { k: 'DatDoctoDetail.IDDirPais', d: 'País', section: 'Asegurado', display: { section: 'Datos del asegurado', subgroup: 'Domicilio del asegurado', order: 44, span: 1, availability: 'printed' } },
 
   // Vehículo
-  { k: 'DatDoctoDetail.Clave', d: 'Clave', section: 'Vehículo', display: { section: 'Datos del vehículo', subgroup: 'Descripción del vehículo', order: 13, span: 1, availability: 'printed' } },
-  { k: 'DatDoctoDetail.Marca', d: 'Marca', section: 'Vehículo', display: { section: 'Datos del vehículo', subgroup: 'Descripción del vehículo', order: 11, span: 1, availability: 'printed' } },
-  { k: 'DatDoctoDetail.Tipo', d: 'Tipo', section: 'Vehículo', display: { section: 'Datos del vehículo', subgroup: 'Descripción del vehículo', order: 12, span: 2, availability: 'printed' } },
-  { k: 'DatDoctoDetail.Modelo', d: 'Modelo', section: 'Vehículo', display: { section: 'Datos del vehículo', subgroup: 'Descripción del vehículo', order: 14, span: 1, availability: 'printed' } },
-  { k: 'DatDoctoDetail.Serie', d: 'Serie', section: 'Vehículo', display: { section: 'Datos del vehículo', subgroup: 'Descripción del vehículo', order: 15, span: 1, availability: 'printed' } },
-  { k: 'DatDoctoDetail.Motor', d: 'Motor', section: 'Vehículo', display: { section: 'Datos del vehículo', subgroup: 'Descripción del vehículo', order: 16, span: 1, availability: 'printed' } },
-  { k: 'DatDoctoDetail.Repuve', d: 'Repuve', section: 'Vehículo', display: { section: 'Datos del vehículo', subgroup: 'Descripción del vehículo', order: 22, span: 1, availability: 'not-printed' } },
-  { k: 'DatDoctoDetail.Placas', d: 'Placas / Matricula', section: 'Vehículo', display: { section: 'Datos del vehículo', subgroup: 'Descripción del vehículo', order: 17, span: 1, availability: 'printed' } },
-  { k: 'DatDoctoDetail.EstadoCircula', d: 'Estado circula', section: 'Vehículo', display: { section: 'Datos del vehículo', subgroup: 'Descripción del vehículo', order: 21, span: 1, availability: 'printed' } },
-  { k: 'DatDoctoDetail.Color', d: 'Color', section: 'Vehículo', display: { section: 'Datos del vehículo', subgroup: 'Descripción del vehículo', order: 18, span: 1, availability: 'printed' } },
-  { k: 'DatDoctoDetail.UsoVehiculo', d: 'Uso del vehículo', section: 'Vehículo', display: { section: 'Datos del vehículo', subgroup: 'Descripción del vehículo', order: 19, span: 1, availability: 'printed' } },
-  { k: 'DatDoctoDetail.TipoCarga', d: 'Tipo de carga', section: 'Vehículo', display: { section: 'Datos del vehículo', subgroup: 'Descripción del vehículo', order: 23, span: 1, availability: 'not-printed' } },
-  { k: 'DatDoctoDetail.Servicio', d: 'Servicio', section: 'Vehículo', display: { section: 'Datos del vehículo', subgroup: 'Descripción del vehículo', order: 20, span: 1, availability: 'printed' } }
+  { k: 'DatDoctoDetail.Clave', d: 'Clave', section: 'Vehículo', display: { section: 'Datos del vehículo', subgroup: 'Descripción del vehículo', order: 14, span: 1, availability: 'printed' } },
+  { k: 'DatDoctoDetail.Marca', d: 'Marca', section: 'Vehículo', display: { section: 'Datos del vehículo', subgroup: 'Descripción del vehículo', order: 12, span: 1, availability: 'printed' } },
+  { k: 'DatDoctoDetail.Tipo', d: 'Tipo', section: 'Vehículo', display: { section: 'Datos del vehículo', subgroup: 'Descripción del vehículo', order: 13, span: 2, availability: 'printed' } },
+  { k: 'DatDoctoDetail.Modelo', d: 'Modelo', section: 'Vehículo', display: { section: 'Datos del vehículo', subgroup: 'Descripción del vehículo', order: 15, span: 1, availability: 'printed' } },
+  { k: 'DatDoctoDetail.Serie', d: 'Serie', section: 'Vehículo', display: { section: 'Datos del vehículo', subgroup: 'Descripción del vehículo', order: 16, span: 1, availability: 'printed' } },
+  { k: 'DatDoctoDetail.Motor', d: 'Motor', section: 'Vehículo', display: { section: 'Datos del vehículo', subgroup: 'Descripción del vehículo', order: 17, span: 1, availability: 'printed' } },
+  { k: 'DatDoctoDetail.Repuve', d: 'Repuve', section: 'Vehículo', display: { section: 'Datos del vehículo', subgroup: 'Descripción del vehículo', order: 23, span: 1, availability: 'not-printed' } },
+  { k: 'DatDoctoDetail.Placas', d: 'Placas / Matricula', section: 'Vehículo', display: { section: 'Datos del vehículo', subgroup: 'Descripción del vehículo', order: 18, span: 1, availability: 'printed' } },
+  { k: 'DatDoctoDetail.EstadoCircula', d: 'Estado circula', section: 'Vehículo', display: { section: 'Datos del vehículo', subgroup: 'Descripción del vehículo', order: 22, span: 1, availability: 'printed' } },
+  { k: 'DatDoctoDetail.Color', d: 'Color', section: 'Vehículo', display: { section: 'Datos del vehículo', subgroup: 'Descripción del vehículo', order: 19, span: 1, availability: 'printed' } },
+  { k: 'DatDoctoDetail.UsoVehiculo', d: 'Uso del vehículo', section: 'Vehículo', display: { section: 'Datos del vehículo', subgroup: 'Descripción del vehículo', order: 20, span: 1, availability: 'printed' } },
+  { k: 'DatDoctoDetail.TipoCarga', d: 'Tipo de carga', section: 'Vehículo', display: { section: 'Datos del vehículo', subgroup: 'Descripción del vehículo', order: 24, span: 1, availability: 'not-printed' } },
+  { k: 'DatDoctoDetail.Servicio', d: 'Servicio', section: 'Vehículo', display: { section: 'Datos del vehículo', subgroup: 'Descripción del vehículo', order: 21, span: 1, availability: 'printed' } },
+
+  // Nuevos campos (append only)
+  { k: 'DatDocumentos.CompaniaPoliza', d: 'Compañía de la póliza', section: 'Póliza', display: { section: 'Datos de la póliza', subgroup: 'Identificación del documento', order: 25, span: 1, availability: 'printed' } },
+  { k: 'DatDocumentos.BeneficiarioPreferente', d: 'Beneficiario preferente', section: 'Póliza', display: { section: 'Datos de la póliza', subgroup: 'Beneficiario', order: 34, span: 1, availability: 'printed' } },
+  { k: 'DatDocumentos.IDRFC', d: 'RFC', section: 'Contratante', display: { section: 'Datos del contratante', subgroup: 'Identificación del contratante', order: 2, span: 1, availability: 'printed' } }
 ];
 
 export const POLIZA_LAYOUT_FIELDS = layoutFields;
@@ -107,6 +112,59 @@ export function mapExtractedFieldsToLayout(payload, fields = POLIZA_LAYOUT_FIELD
   });
 
   return layout;
+}
+
+export function applyCompanyFallback(layout, aseguradora, fields = POLIZA_LAYOUT_FIELDS) {
+  const key = 'DatDocumentos.CompaniaPoliza';
+  const companyIndex =
+    fields === POLIZA_LAYOUT_FIELDS
+      ? POLIZA_LAYOUT_INDEX_BY_KEY[key]
+      : fields.findIndex((field) => field.k === key);
+
+  const next = Array.isArray(layout) ? [...layout] : [];
+  if (companyIndex < 0) {
+    return next;
+  }
+
+  const current = String(next[companyIndex] ?? '').trim();
+  if (current !== '') {
+    return next;
+  }
+
+  const fallback = String(aseguradora ?? '').trim();
+  if (fallback !== '') {
+    next[companyIndex] = fallback;
+  }
+
+  return next;
+}
+
+const SUMMARY_ROW_SPEC = [
+  { label: 'Nombre del asegurado', key: 'DatDoctoDetail.IDAseg' },
+  { label: 'Compañía de la póliza', key: 'DatDocumentos.CompaniaPoliza' },
+  { label: 'Número de póliza', key: 'DatDocumentos.Documento' },
+  { label: 'Marca', key: 'DatDoctoDetail.Marca' },
+  { label: 'Tipo', key: 'DatDoctoDetail.Tipo' },
+  { label: 'Clave', key: 'DatDoctoDetail.Clave' },
+  { label: 'Modelo', key: 'DatDoctoDetail.Modelo' },
+  { label: 'Serie', key: 'DatDoctoDetail.Serie' },
+  { label: 'Motor', key: 'DatDoctoDetail.Motor' }
+];
+
+export function buildDataSummaryRows(layout, fields = POLIZA_LAYOUT_FIELDS) {
+  const normalizedLayout = Array.isArray(layout) ? layout : [];
+
+  return SUMMARY_ROW_SPEC.map(({ label, key }) => {
+    const index =
+      fields === POLIZA_LAYOUT_FIELDS
+        ? POLIZA_LAYOUT_INDEX_BY_KEY[key]
+        : fields.findIndex((field) => field.k === key);
+
+    const raw = index >= 0 && index < normalizedLayout.length ? normalizedLayout[index] : '';
+    const value = String(raw ?? '').trim();
+
+    return { label, value };
+  });
 }
 
 export function buildPolizaDisplaySections(fields = POLIZA_LAYOUT_FIELDS) {
