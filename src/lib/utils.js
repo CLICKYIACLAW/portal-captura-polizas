@@ -264,3 +264,89 @@ export function getAltaSaveHint(alta) {
   const first = missing.slice(0, 4).map((key) => ALTA_LABELS[key]).join(', ');
   return `Faltan: ${first} y ${missing.length - 4} más.`;
 }
+
+export const ALTA_EXTRACTABLE_KEYS = [
+  'apP',
+  'apM',
+  'nombres',
+  'razon',
+  'rfc',
+  'email',
+  'tel',
+  'calle',
+  'numero',
+  'cp',
+  'colonia',
+  'municipio',
+  'estado',
+  'giro',
+  'regimen'
+];
+
+export function buildAltaAnthropicPrompt(tipo) {
+  const fisicaNameKeys = tipo === 'fisica' ? ['apP', 'apM', 'nombres'] : [];
+  const moralNameKey = tipo === 'moral' ? ['razon'] : [];
+  const commonKeys = ['rfc', 'email', 'tel', 'calle', 'numero', 'cp', 'colonia', 'municipio', 'estado', 'giro', 'regimen'];
+  const keys = [...fisicaNameKeys, ...moralNameKey, ...commonKeys];
+  const keysList = keys.map((key) => `    "${key}": string | null`).join(',\n');
+
+  return [
+    'Analiza el documento adjunto de un asegurado en México (RFC, constancia de situación fiscal, comprobante de domicilio o INE) y extrae todos los datos que puedas completar en el formulario.',
+    'Responde ÚNICAMENTE con JSON válido, sin markdown, sin explicaciones y sin texto adicional.',
+    'Cuando un dato no aparezca con claridad, usa null.',
+    'No inventes datos.',
+    'Todos los campos son textos.',
+    'La estructura debe ser:',
+    '{',
+    '  "alta": {',
+    keysList,
+    '  }',
+    '}',
+    'Usa exactamente las claves técnicas indicadas como claves JSON; no inventes claves.',
+    'Si el documento no muestra un campo, omítelo o usa null.',
+    'Nunca devuelvas un arreglo posicional; usa siempre el objeto con claves.',
+    'Devuelve los datos listos para llenar el alta.'
+  ].join('\n');
+}
+
+export function mapAltaExtraction(current, result) {
+  if (!current || typeof current !== 'object' || Array.isArray(current)) {
+    return current;
+  }
+
+  const base = { ...current };
+  const source =
+    result && typeof result === 'object' && !Array.isArray(result) && result.alta && typeof result.alta === 'object' && !Array.isArray(result.alta)
+      ? result.alta
+      : {};
+
+  const filledKeys = new Set();
+
+  for (const key of ALTA_EXTRACTABLE_KEYS) {
+    if (!isEmptyAltaValue(base[key])) continue;
+
+    let value = source[key];
+    if (value === null || value === undefined) continue;
+    value = String(value).trim();
+    if (value === '') continue;
+
+    if (base.tipo === 'fisica' && key === 'razon') continue;
+    if (base.tipo === 'moral' && (key === 'apP' || key === 'apM' || key === 'nombres')) continue;
+
+    base[key] = value;
+    filledKeys.add(key);
+  }
+
+  if (filledKeys.has('cp')) {
+    const afterCp = applyAltaPostalCode(base, base.cp);
+    base.estado = afterCp.estado;
+    base.estadoDerivado = afterCp.estadoDerivado;
+  }
+
+  if (filledKeys.has('estado')) {
+    base.estadoDerivado = false;
+  }
+
+  base.tipo = current.tipo;
+  return base;
+}
