@@ -1,3 +1,6 @@
+import { resolveMexicanAddressFromPostalCode } from './cpPrefixEstado.js';
+import { validateRfc } from './rfc.js';
+
 export function normalizeAssignmentValue(value) {
   return value == null ? '' : String(value).trim();
 }
@@ -128,4 +131,63 @@ export async function fetchJson(url, options = {}) {
     throw new Error(payload?.error || `Error HTTP ${response.status}`);
   }
   return payload;
+}
+
+export function applyAltaPostalCode(current, cp) {
+  const base = current != null ? { ...current } : {};
+  const next = { ...base, cp };
+
+  const digits = String(cp ?? '').replace(/\D/g, '');
+  const resolved = digits.length === 5 ? resolveMexicanAddressFromPostalCode(digits) : null;
+
+  const currentEstado = String(base.estado ?? '');
+  const wasDerived = base.estadoDerivado === true;
+
+  if (resolved) {
+    if (currentEstado === '' || wasDerived) {
+      next.estado = resolved.estado;
+      next.estadoDerivado = true;
+    }
+  } else if (wasDerived) {
+    next.estado = '';
+    next.estadoDerivado = false;
+  }
+
+  return next;
+}
+
+export function buildAltaFieldNotes(alta) {
+  if (alta == null) return {};
+
+  const notes = {};
+
+  const rfcValue = String(alta.rfc ?? '');
+  if (rfcValue.length > 0) {
+    const result = validateRfc(rfcValue);
+    if (result.state === 'valid') {
+      notes.rfc = { text: 'RFC válido', tone: 'ok' };
+    } else if (result.state === 'invalid') {
+      notes.rfc = { text: 'RFC inválido', tone: 'bad' };
+    } else {
+      notes.rfc = { text: 'RFC incompleto', tone: 'muted' };
+    }
+  }
+
+  const cpValue = String(alta.cp ?? '');
+  if (cpValue.length > 0) {
+    const digits = cpValue.replace(/\D/g, '');
+    if (digits.length < 5) {
+      notes.cp = { text: 'CP incompleto', tone: 'muted' };
+    } else if (resolveMexicanAddressFromPostalCode(digits)) {
+      notes.cp = { text: 'CP válido', tone: 'ok' };
+    } else {
+      notes.cp = { text: 'CP no reconocido', tone: 'bad' };
+    }
+  }
+
+  if (alta.estadoDerivado === true) {
+    notes.estado = { text: 'Valor derivado', tone: 'info' };
+  }
+
+  return notes;
 }

@@ -852,6 +852,19 @@ a {
   font-size: 0.62rem;
 }
 
+.asegurados-page .mini-field label {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 8px;
+}
+
+.asegurados-page .mini-field label .pill {
+  letter-spacing: 0.04em;
+  padding: 2px 8px;
+  font-size: 0.62rem;
+}
+
 .badge,
 .pill {
   display: inline-flex;
