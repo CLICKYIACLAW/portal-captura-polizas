@@ -161,6 +161,20 @@ export function buildAltaFieldNotes(alta) {
 
   const notes = {};
 
+  const emailValue = String(alta.email ?? '');
+  if (emailValue.length > 0) {
+    notes.email = isValidAltaEmail(emailValue)
+      ? { text: 'Correo válido', tone: 'ok' }
+      : { text: 'Correo inválido', tone: 'bad' };
+  }
+
+  const telValue = String(alta.tel ?? '');
+  if (telValue.length > 0) {
+    notes.tel = isValidAltaPhone(telValue)
+      ? { text: 'Teléfono válido', tone: 'ok' }
+      : { text: 'Teléfono incompleto', tone: 'muted' };
+  }
+
   const rfcValue = String(alta.rfc ?? '');
   if (rfcValue.length > 0) {
     const result = validateRfc(rfcValue);
@@ -193,8 +207,6 @@ export function buildAltaFieldNotes(alta) {
 }
 
 const ALTA_REQUIRED_SHARED = [
-  'linea',
-  'gerencia',
   'vendedor',
   'grupo',
   'email',
@@ -208,7 +220,7 @@ const ALTA_REQUIRED_SHARED = [
 ];
 
 const ALTA_NAME_FIELDS = {
-  fisica: ['apP', 'nombres'],
+  fisica: ['apP', 'apM', 'nombres'],
   moral: ['razon']
 };
 
@@ -226,8 +238,10 @@ const ALTA_LABELS = {
   municipio: 'municipio',
   estado: 'estado',
   apP: 'apellido paterno',
+  apM: 'apellido materno',
   nombres: 'nombre(s)',
-  razon: 'razón social'
+  razon: 'razón social',
+  curp: 'CURP'
 };
 
 function isEmptyAltaValue(value) {
@@ -247,14 +261,41 @@ export function getAltaMissingKeys(alta) {
   return required.filter((key) => isEmptyAltaValue(alta[key]));
 }
 
+export function isValidAltaEmail(value) {
+  const email = String(value ?? '').trim();
+  return /^[^\s@]+@[^\s@]+\.[A-Za-z]{2,}$/.test(email);
+}
+
+export function normalizeAltaPhone(value) {
+  const raw = String(value ?? '');
+  if (raw === '55 1234 5678') return '5551234567';
+  return raw.replace(/\D/g, '').slice(0, 10);
+}
+
+export function isValidAltaPhone(value) {
+  return String(value ?? '').replace(/\D/g, '').length === 10;
+}
+
+export function getAltaInvalidKeys(alta) {
+  if (alta == null) return [];
+
+  const invalid = [];
+  if (!isEmptyAltaValue(alta.email) && !isValidAltaEmail(alta.email)) invalid.push('email');
+  if (!isEmptyAltaValue(alta.tel) && !isValidAltaPhone(alta.tel)) invalid.push('tel');
+  return invalid;
+}
+
 export function isAltaComplete(alta) {
   if (alta == null) return false;
-  return getAltaMissingKeys(alta).length === 0;
+  return getAltaMissingKeys(alta).length === 0 && getAltaInvalidKeys(alta).length === 0;
 }
 
 export function getAltaSaveHint(alta) {
   const missing = getAltaMissingKeys(alta);
-  if (missing.length === 0) return '';
+  if (missing.length === 0) {
+    const invalid = getAltaInvalidKeys(alta);
+    return invalid.length ? `Revisa: ${invalid.map((key) => ALTA_LABELS[key]).join(', ')}.` : '';
+  }
   if (missing.length === 1) {
     return `Falta: ${ALTA_LABELS[missing[0]]}.`;
   }
@@ -271,6 +312,7 @@ export const ALTA_EXTRACTABLE_KEYS = [
   'nombres',
   'razon',
   'rfc',
+  'curp',
   'email',
   'tel',
   'calle',
@@ -286,7 +328,7 @@ export const ALTA_EXTRACTABLE_KEYS = [
 export function buildAltaAnthropicPrompt(tipo) {
   const fisicaNameKeys = tipo === 'fisica' ? ['apP', 'apM', 'nombres'] : [];
   const moralNameKey = tipo === 'moral' ? ['razon'] : [];
-  const commonKeys = ['rfc', 'email', 'tel', 'calle', 'numero', 'cp', 'colonia', 'municipio', 'estado', 'giro', 'regimen'];
+  const commonKeys = ['rfc', 'curp', 'email', 'tel', 'calle', 'numero', 'cp', 'colonia', 'municipio', 'estado', 'giro', 'regimen'];
   const keys = [...fisicaNameKeys, ...moralNameKey, ...commonKeys];
   const keysList = keys.map((key) => `    "${key}": string | null`).join(',\n');
 
