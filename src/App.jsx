@@ -42,6 +42,7 @@ import {
   isAltaComplete,
   mapAltaExtraction,
   normalizeKey,
+  normalizeAltaPhone,
   normalizeText,
   splitName
 } from './lib/utils';
@@ -113,6 +114,7 @@ function emptyAlta() {
     nombres: '',
     razon: '',
     rfc: '',
+    curp: '',
     email: '',
     tel: '',
     calle: '',
@@ -1399,8 +1401,8 @@ function App() {
       openErrorModal('Faltan datos', 'Completa el nombre del asegurado.');
       return;
     }
-    if (!alta.linea || !alta.gerencia || !alta.vendedor) {
-      openErrorModal('Faltan datos', 'Completa línea, gerencia y vendedor.');
+    if (!alta.vendedor) {
+      openErrorModal('Faltan datos', 'Completa el vendedor.');
       return;
     }
 
@@ -1417,6 +1419,7 @@ function App() {
       nombres: alta.nombres,
       razon: alta.razon,
       rfc: alta.rfc,
+      curp: alta.curp,
       email: alta.email,
       tel: alta.tel,
       calle: alta.calle,
@@ -1962,7 +1965,7 @@ function App() {
                 }
               />
               <ComboField
-                label="Vendedor"
+                label="Vendedor *"
                 value={alta.vendedor}
                 options={vendorOptions}
                 placeholder={vendedoresLoading ? 'Cargando vendedores...' : 'Selecciona el vendedor'}
@@ -1985,7 +1988,7 @@ function App() {
                 }}
               />
               <ComboField
-                label="Grupo"
+                label="Grupo *"
                 value={alta.grupo}
                 options={groupCatalog}
                 placeholder={groupsLoading ? 'Cargando grupos...' : 'Selecciona o escribe un grupo'}
@@ -1997,21 +2000,24 @@ function App() {
               />
             </div>
 
-            <div className="type-switch">
-              <button
-                type="button"
-                className={alta.tipo === 'fisica' ? 'switch active' : 'switch'}
-                onClick={() => setAlta((current) => ({ ...current, tipo: 'fisica' }))}
-              >
-                Física
-              </button>
-              <button
-                type="button"
-                className={alta.tipo === 'moral' ? 'switch active' : 'switch'}
-                onClick={() => setAlta((current) => ({ ...current, tipo: 'moral' }))}
-              >
-                Moral
-              </button>
+            <div className="mini-field">
+              <label>Tipo de persona</label>
+              <div className="type-switch">
+                <button
+                  type="button"
+                  className={alta.tipo === 'fisica' ? 'switch active' : 'switch'}
+                  onClick={() => setAlta((current) => ({ ...current, tipo: 'fisica' }))}
+                >
+                  Física
+                </button>
+                <button
+                  type="button"
+                  className={alta.tipo === 'moral' ? 'switch active' : 'switch'}
+                  onClick={() => setAlta((current) => ({ ...current, tipo: 'moral' }))}
+                >
+                  Moral
+                </button>
+              </div>
             </div>
 
             <div className="form-divider">Documento del asegurado (opcional)</div>
@@ -2079,7 +2085,7 @@ function App() {
                   />
                 </div>
                 <div className="mini-field">
-                  <label>Apellido materno</label>
+                  <label>Apellido materno *</label>
                   <input
                     type="text"
                     value={alta.apM}
@@ -2110,43 +2116,53 @@ function App() {
 
             <div className="ramo-grid alta-grid">
               <div className="mini-field">
-                <label>Correo</label>
+                <label>
+                  <span>Correo *</span>
+                  {altaNotes.email ? <span className={'pill tone-' + altaNotes.email.tone}>{altaNotes.email.text}</span> : null}
+                </label>
                 <input type="email" value={alta.email} onChange={(e) => setAlta((current) => ({ ...current, email: e.target.value }))} />
               </div>
               <div className="mini-field">
-                <label>Teléfono</label>
-                <input type="text" value={alta.tel} onChange={(e) => setAlta((current) => ({ ...current, tel: e.target.value }))} />
+                <label>
+                  <span>Teléfono *</span>
+                  {altaNotes.tel ? <span className={'pill tone-' + altaNotes.tel.tone}>{altaNotes.tel.text}</span> : null}
+                </label>
+                <input
+                  type="text"
+                  value={alta.tel}
+                  onChange={(e) => setAlta((current) => ({ ...current, tel: normalizeAltaPhone(e.target.value) }))}
+                />
               </div>
             </div>
 
             <div className="form-divider">Domicilio</div>
             <div className="ramo-grid alta-grid">
               <div className="mini-field">
-                <label>Calle</label>
+                <label>Calle *</label>
                 <input type="text" value={alta.calle} onChange={(e) => setAlta((current) => ({ ...current, calle: e.target.value }))} />
               </div>
               <div className="mini-field">
-                <label>Número</label>
+                <label>Número *</label>
                 <input type="text" value={alta.numero} onChange={(e) => setAlta((current) => ({ ...current, numero: e.target.value }))} />
               </div>
               <div className="mini-field">
                 <label>
-                  <span>Código postal</span>
+                  <span>Código postal *</span>
                   {altaNotes.cp ? <span className={'pill tone-' + altaNotes.cp.tone}>{altaNotes.cp.text}</span> : null}
                 </label>
                 <input type="text" value={alta.cp} onChange={(e) => setAlta((current) => applyAltaPostalCode(current, e.target.value))} />
               </div>
               <div className="mini-field">
-                <label>Colonia</label>
+                <label>Colonia *</label>
                 <input type="text" value={alta.colonia} onChange={(e) => setAlta((current) => ({ ...current, colonia: e.target.value }))} />
               </div>
               <div className="mini-field">
-                <label>Municipio / alcaldía</label>
+                <label>Municipio / alcaldía *</label>
                 <input type="text" value={alta.municipio} onChange={(e) => setAlta((current) => ({ ...current, municipio: e.target.value }))} />
               </div>
               <div className="mini-field">
                 <label>
-                  <span>Estado</span>
+                  <span>Estado *</span>
                   {altaNotes.estado ? <span className={'pill tone-' + altaNotes.estado.tone}>{altaNotes.estado.text}</span> : null}
                 </label>
                 <input type="text" value={alta.estado} onChange={(e) => setAlta((current) => ({ ...current, estado: e.target.value, estadoDerivado: false }))} />
@@ -2161,6 +2177,10 @@ function App() {
                   {altaNotes.rfc ? <span className={'pill tone-' + altaNotes.rfc.tone}>{altaNotes.rfc.text}</span> : null}
                 </label>
                 <input type="text" value={alta.rfc} onChange={(e) => setAlta((current) => ({ ...current, rfc: e.target.value }))} />
+              </div>
+              <div className="mini-field">
+                <label>CURP</label>
+                <input type="text" value={alta.curp} onChange={(e) => setAlta((current) => ({ ...current, curp: e.target.value }))} />
               </div>
               <div className="mini-field">
                 <label>Giro</label>
