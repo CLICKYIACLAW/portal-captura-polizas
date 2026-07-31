@@ -426,6 +426,21 @@ a {
   box-shadow: none;
 }
 
+.dropzone {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  align-content: start;
+  padding: 18px 16px;
+  cursor: pointer;
+  min-height: 110px;
+  border-style: dashed;
+  border-color: rgba(17, 24, 39, 0.16);
+  align-items: center;
+  text-align: center;
+  overflow: hidden;
+}
+
 .combo-shell {
   position: relative;
 }
@@ -608,20 +623,6 @@ a {
   height: 18px;
   flex: 0 0 auto;
   accent-color: var(--brand);
-}
-
-.file-grid .dropzone {
-  display: grid;
-  gap: 8px;
-  align-content: start;
-  padding: 18px 16px;
-  cursor: pointer;
-  min-height: 110px;
-  border-style: dashed;
-  border-color: rgba(17, 24, 39, 0.16);
-  align-items: center;
-  text-align: center;
-  position: relative;
 }
 
 .upload-card {
@@ -1228,4 +1229,3 @@ a {
   background: var(--bg-soft);
   cursor: default;
 }
-
