@@ -31,6 +31,7 @@ import {
   applyAltaPostalCode,
   applyAssignmentSelection,
   applyCaptureFieldUpdate,
+  buildAltaAnthropicPrompt,
   buildAltaFieldNotes,
   countFilled,
   fileToBase64,
@@ -39,6 +40,7 @@ import {
   formatShortDate,
   getAltaSaveHint,
   isAltaComplete,
+  mapAltaExtraction,
   normalizeKey,
   normalizeText,
   splitName
@@ -619,16 +621,16 @@ function buildAnthropicPrompt(fields, sections, ramoLabel, subramoLabel) {
   ].join('\n');
 }
 
-async function callAnthropic(file, fields, sections, ramoLabel, subramoLabel) {
+async function callAnthropic(file, { prompt, errorLabel = 'leer el documento' }) {
   const apiKey = ensureAnthropicKey();
   if (!apiKey) {
-    throw new Error('Se requiere la clave de API de Anthropic para leer la póliza.');
+    throw new Error(`Se requiere la clave de API de Anthropic para ${errorLabel}.`);
   }
 
   const fileData = await fileToBase64(file);
   const content = [
     buildAnthropicDocumentBlock(file, fileData),
-    { type: 'text', text: buildAnthropicPrompt(fields, sections, ramoLabel, subramoLabel) }
+    { type: 'text', text: prompt }
   ];
 
   const response = await fetch(ANTHROPIC_API_URL, {
@@ -726,6 +728,8 @@ function App() {
   const altaComplete = useMemo(() => isAltaComplete(alta), [alta]);
   const altaHint = useMemo(() => getAltaSaveHint(alta), [alta]);
   const [altaReturnToCapture, setAltaReturnToCapture] = useState(false);
+  const [altaDocumentFile, setAltaDocumentFile] = useState(null);
+  const [readingDocumentLabel, setReadingDocumentLabel] = useState('');
   const [bootVersion, setBootVersion] = useState('React + MySQL · seed local');
   const [ramoCatalog, setRamoCatalog] = useState([]);
   const [subramoCatalog, setSubramoCatalog] = useState([]);
@@ -1243,10 +1247,14 @@ function App() {
     }
 
     const file = doc.file;
+    setReadingDocumentLabel('Leyendo póliza');
     setReadingDocument(true);
     pushToast('Leyendo póliza con Anthropic...');
     try {
-      const result = await callAnthropic(file, POLIZA_LAYOUT_FIELDS, POLIZA_LAYOUT_SECTIONS, capture.ramo, capture.subramo);
+      const result = await callAnthropic(file, {
+        prompt: buildAnthropicPrompt(POLIZA_LAYOUT_FIELDS, POLIZA_LAYOUT_SECTIONS, capture.ramo, capture.subramo),
+        errorLabel: 'leer la póliza'
+      });
       const campos = result?.campos;
       if (
         !campos ||
@@ -1293,6 +1301,30 @@ function App() {
     } catch (readError) {
       openErrorModal('Error de lectura', readError.message || 'No se pudo completar la lectura del archivo.');
       return;
+    } finally {
+      setReadingDocument(false);
+    }
+  }
+
+  async function readAltaDocument() {
+    if (!altaDocumentFile) {
+      openErrorModal('Falta un archivo', 'Carga un documento del asegurado antes de pedir lectura asistida.');
+      return;
+    }
+
+    const file = altaDocumentFile.file;
+    setReadingDocumentLabel('Leyendo documento del asegurado');
+    setReadingDocument(true);
+    pushToast('Leyendo documento del asegurado con Anthropic...');
+    try {
+      const result = await callAnthropic(file, {
+        prompt: buildAltaAnthropicPrompt(alta.tipo),
+        errorLabel: 'leer el documento del asegurado'
+      });
+      setAlta((current) => mapAltaExtraction(current, result));
+      pushToast('Lectura completada');
+    } catch (readError) {
+      openErrorModal('Error de lectura', readError.message || 'No se pudo completar la lectura del archivo.');
     } finally {
       setReadingDocument(false);
     }
@@ -1479,7 +1511,7 @@ function App() {
       <div className="screen-lock__card">
         <div className="screen-lock__spinner" aria-hidden="true" />
         <div>
-          <strong>Leyendo póliza</strong>
+          <strong>{readingDocumentLabel || 'Leyendo documento'}</strong>
           <p>La pantalla quedó bloqueada mientras se extraen los datos. No cambies nada hasta que termine.</p>
         </div>
       </div>
@@ -1979,6 +2011,59 @@ function App() {
                 onClick={() => setAlta((current) => ({ ...current, tipo: 'moral' }))}
               >
                 Moral
+              </button>
+            </div>
+
+            <div className="form-divider">Documento del asegurado (opcional)</div>
+            <div className="upload-card">
+              <label className="dropzone">
+                <strong>Sube RFC, constancia de situación fiscal, comprobante de domicilio o INE</strong>
+                <small>PDF, JPG o PNG · la IA llena el formulario y tú lo complementas</small>
+                <input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                  onChange={(event) => {
+                    const selected = Array.from(event.target.files || []);
+                    if (!selected.length) return;
+                    const file = selected[0];
+                    setAltaDocumentFile({
+                      file,
+                      name: file.name,
+                      type: file.type,
+                      sizeMb: (file.size / 1048576).toFixed(1),
+                      cat: 'alta-documento'
+                    });
+                  }}
+                />
+              </label>
+              {altaDocumentFile ? (
+                <div className="upload-files">
+                  <div className="upload-file">
+                    <div className="upload-file-meta">
+                      <strong>{altaDocumentFile.name}</strong>
+                      <span>
+                        {altaDocumentFile.cat.toUpperCase()} · {altaDocumentFile.sizeMb} MB · {altaDocumentFile.type || 'archivo'}
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      className="ghost-button danger"
+                      onClick={() => setAltaDocumentFile(null)}
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+            <div className="read-actions">
+              <button
+                type="button"
+                className="primary-button"
+                onClick={readAltaDocument}
+                disabled={!altaDocumentFile || readingDocument}
+              >
+                {readingDocument && readingDocumentLabel === 'Leyendo documento del asegurado' ? 'Leyendo...' : 'Leer documento'}
               </button>
             </div>
 
