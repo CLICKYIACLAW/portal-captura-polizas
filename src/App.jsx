@@ -228,7 +228,7 @@ function ComboField({
 
   return (
     <div className="combo-field">
-      <label>{label}</label>
+      <label>{typeof label === 'string' && label.endsWith(' *') ? <>{label.slice(0, -2)} <span className="required-mark">*</span></> : label}</label>
       <div className={`combo-shell ${disabled ? 'disabled' : ''}`}>
         <input
           value={query}
@@ -2077,7 +2077,7 @@ function App() {
             {alta.tipo === 'fisica' ? (
               <div className="ramo-grid alta-grid">
                 <div className="mini-field">
-                  <label>Apellido paterno *</label>
+                  <label>Apellido paterno <span className="required-mark">*</span></label>
                   <input
                     type="text"
                     value={alta.apP}
@@ -2085,7 +2085,7 @@ function App() {
                   />
                 </div>
                 <div className="mini-field">
-                  <label>Apellido materno *</label>
+                  <label>Apellido materno <span className="required-mark">*</span></label>
                   <input
                     type="text"
                     value={alta.apM}
@@ -2093,7 +2093,7 @@ function App() {
                   />
                 </div>
                 <div className="mini-field">
-                  <label>Nombre(s) *</label>
+                  <label>Nombre(s) <span className="required-mark">*</span></label>
                   <input
                     type="text"
                     value={alta.nombres}
@@ -2104,7 +2104,7 @@ function App() {
             ) : (
               <div className="ramo-grid alta-grid">
                 <div className="mini-field span-3">
-                  <label>Razón social *</label>
+                  <label>Razón social <span className="required-mark">*</span></label>
                   <input
                     type="text"
                     value={alta.razon}
@@ -2117,14 +2117,14 @@ function App() {
             <div className="ramo-grid alta-grid">
               <div className="mini-field">
                 <label>
-                  <span>Correo *</span>
+                  <span>Correo <span className="required-mark">*</span></span>
                   {altaNotes.email ? <span className={'pill tone-' + altaNotes.email.tone}>{altaNotes.email.text}</span> : null}
                 </label>
                 <input type="email" value={alta.email} onChange={(e) => setAlta((current) => ({ ...current, email: e.target.value }))} />
               </div>
               <div className="mini-field">
                 <label>
-                  <span>Teléfono *</span>
+                  <span>Teléfono <span className="required-mark">*</span></span>
                   {altaNotes.tel ? <span className={'pill tone-' + altaNotes.tel.tone}>{altaNotes.tel.text}</span> : null}
                 </label>
                 <input
@@ -2138,31 +2138,31 @@ function App() {
             <div className="form-divider">Domicilio</div>
             <div className="ramo-grid alta-grid">
               <div className="mini-field">
-                <label>Calle *</label>
+                <label>Calle <span className="required-mark">*</span></label>
                 <input type="text" value={alta.calle} onChange={(e) => setAlta((current) => ({ ...current, calle: e.target.value }))} />
               </div>
               <div className="mini-field">
-                <label>Número *</label>
+                <label>Número <span className="required-mark">*</span></label>
                 <input type="text" value={alta.numero} onChange={(e) => setAlta((current) => ({ ...current, numero: e.target.value }))} />
               </div>
               <div className="mini-field">
                 <label>
-                  <span>Código postal *</span>
+                  <span>Código postal <span className="required-mark">*</span></span>
                   {altaNotes.cp ? <span className={'pill tone-' + altaNotes.cp.tone}>{altaNotes.cp.text}</span> : null}
                 </label>
                 <input type="text" value={alta.cp} onChange={(e) => setAlta((current) => applyAltaPostalCode(current, e.target.value))} />
               </div>
               <div className="mini-field">
-                <label>Colonia *</label>
+                <label>Colonia <span className="required-mark">*</span></label>
                 <input type="text" value={alta.colonia} onChange={(e) => setAlta((current) => ({ ...current, colonia: e.target.value }))} />
               </div>
               <div className="mini-field">
-                <label>Municipio / alcaldía *</label>
+                <label>Municipio / alcaldía <span className="required-mark">*</span></label>
                 <input type="text" value={alta.municipio} onChange={(e) => setAlta((current) => ({ ...current, municipio: e.target.value }))} />
               </div>
               <div className="mini-field">
                 <label>
-                  <span>Estado *</span>
+                  <span>Estado <span className="required-mark">*</span></span>
                   {altaNotes.estado ? <span className={'pill tone-' + altaNotes.estado.tone}>{altaNotes.estado.text}</span> : null}
                 </label>
                 <input type="text" value={alta.estado} onChange={(e) => setAlta((current) => ({ ...current, estado: e.target.value, estadoDerivado: false }))} />

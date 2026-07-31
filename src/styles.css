@@ -416,6 +416,10 @@ a {
   text-transform: uppercase;
 }
 
+.required-mark {
+  color: var(--danger);
+}
+
 .combo-shell,
 .mini-field input,
 .dropzone {
