@@ -37,6 +37,8 @@ import {
   formatDateTime,
   formatMoney,
   formatShortDate,
+  getAltaSaveHint,
+  isAltaComplete,
   normalizeKey,
   normalizeText,
   splitName
@@ -721,6 +723,8 @@ function App() {
   const [capture, setCapture] = useState(emptyCapture());
   const [alta, setAlta] = useState(emptyAlta());
   const altaNotes = useMemo(() => buildAltaFieldNotes(alta), [alta]);
+  const altaComplete = useMemo(() => isAltaComplete(alta), [alta]);
+  const altaHint = useMemo(() => getAltaSaveHint(alta), [alta]);
   const [altaReturnToCapture, setAltaReturnToCapture] = useState(false);
   const [bootVersion, setBootVersion] = useState('React + MySQL · seed local');
   const [ramoCatalog, setRamoCatalog] = useState([]);
@@ -1365,6 +1369,11 @@ function App() {
     }
     if (!alta.linea || !alta.gerencia || !alta.vendedor) {
       openErrorModal('Faltan datos', 'Completa línea, gerencia y vendedor.');
+      return;
+    }
+
+    if (!isAltaComplete(alta)) {
+      openErrorModal('Faltan datos', 'Completa todos los campos requeridos.');
       return;
     }
 
@@ -2078,8 +2087,14 @@ function App() {
               </div>
             </div>
 
+            {altaHint ? <p className="muted">{altaHint}</p> : null}
             <div className="actions-row">
-              <button type="button" className="primary-button" onClick={saveAlta}>
+              <button
+                type="button"
+                className="primary-button"
+                onClick={saveAlta}
+                disabled={!altaComplete}
+              >
                 Guardar asegurado
               </button>
               <button type="button" className="ghost-button" onClick={() => setAlta(emptyAlta())}>

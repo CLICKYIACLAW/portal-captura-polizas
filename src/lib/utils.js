@@ -191,3 +191,76 @@ export function buildAltaFieldNotes(alta) {
 
   return notes;
 }
+
+const ALTA_REQUIRED_SHARED = [
+  'linea',
+  'gerencia',
+  'vendedor',
+  'grupo',
+  'email',
+  'tel',
+  'calle',
+  'numero',
+  'cp',
+  'colonia',
+  'municipio',
+  'estado'
+];
+
+const ALTA_NAME_FIELDS = {
+  fisica: ['apP', 'nombres'],
+  moral: ['razon']
+};
+
+const ALTA_LABELS = {
+  linea: 'línea',
+  gerencia: 'gerencia',
+  vendedor: 'vendedor',
+  grupo: 'grupo',
+  email: 'correo',
+  tel: 'teléfono',
+  calle: 'calle',
+  numero: 'número',
+  cp: 'código postal',
+  colonia: 'colonia',
+  municipio: 'municipio',
+  estado: 'estado',
+  apP: 'apellido paterno',
+  nombres: 'nombre(s)',
+  razon: 'razón social'
+};
+
+function isEmptyAltaValue(value) {
+  if (value == null) return true;
+  if (typeof value === 'string') return value.trim() === '';
+  return false;
+}
+
+export function getAltaRequiredKeys(tipo) {
+  const nameFields = ALTA_NAME_FIELDS[tipo] || ALTA_NAME_FIELDS.fisica;
+  return [...ALTA_REQUIRED_SHARED, ...nameFields];
+}
+
+export function getAltaMissingKeys(alta) {
+  if (alta == null) return [];
+  const required = getAltaRequiredKeys(alta.tipo);
+  return required.filter((key) => isEmptyAltaValue(alta[key]));
+}
+
+export function isAltaComplete(alta) {
+  if (alta == null) return false;
+  return getAltaMissingKeys(alta).length === 0;
+}
+
+export function getAltaSaveHint(alta) {
+  const missing = getAltaMissingKeys(alta);
+  if (missing.length === 0) return '';
+  if (missing.length === 1) {
+    return `Falta: ${ALTA_LABELS[missing[0]]}.`;
+  }
+  if (missing.length <= 4) {
+    return `Faltan: ${missing.map((key) => ALTA_LABELS[key]).join(', ')}.`;
+  }
+  const first = missing.slice(0, 4).map((key) => ALTA_LABELS[key]).join(', ');
+  return `Faltan: ${first} y ${missing.length - 4} más.`;
+}
