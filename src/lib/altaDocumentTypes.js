@@ -40,3 +40,15 @@ export function resolveDetectedDocumentType(result) {
   const matched = findAltaDocumentType(normalized);
   return matched ? matched.id : null;
 }
+
+/**
+ * Returns true when the constancia requirement is already satisfied.
+ *
+ * The requirement is met either by a dedicated constancia upload or by the
+ * general document slot having explicitly identified itself as a constancia.
+ */
+export function hasConstanciaDocument(documentFile, constanciaFile) {
+  if (constanciaFile != null) return true;
+  if (documentFile == null) return false;
+  return documentFile.docType === CONSTANCIA_DOCUMENT_ID;
+}

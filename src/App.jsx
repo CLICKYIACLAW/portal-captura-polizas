@@ -53,6 +53,7 @@ import {
   ALTA_DOCUMENT_TYPES,
   CONSTANCIA_DOCUMENT_ID,
   applyDetectedDocumentType,
+  hasConstanciaDocument,
   resolveDetectedDocumentType
 } from './lib/altaDocumentTypes';
 import {
@@ -1006,14 +1007,15 @@ function App() {
   const [capture, setCapture] = useState(emptyCapture());
   const [alta, setAlta] = useState(emptyAlta());
   const [altaDocumentFile, setAltaDocumentFile] = useState(null);
+  const [altaConstanciaFile, setAltaConstanciaFile] = useState(null);
   const altaNotes = useMemo(() => buildAltaFieldNotes(alta), [alta]);
   const altaComplete = useMemo(
-    () => isAltaComplete(alta, { hasConstancia: altaDocumentFile?.docType === CONSTANCIA_DOCUMENT_ID }),
-    [alta, altaDocumentFile]
+    () => isAltaComplete(alta, { hasConstancia: hasConstanciaDocument(altaDocumentFile, altaConstanciaFile) }),
+    [alta, altaDocumentFile, altaConstanciaFile]
   );
   const altaHint = useMemo(
-    () => getAltaSaveHint(alta, { hasConstancia: altaDocumentFile?.docType === CONSTANCIA_DOCUMENT_ID }),
-    [alta, altaDocumentFile]
+    () => getAltaSaveHint(alta, { hasConstancia: hasConstanciaDocument(altaDocumentFile, altaConstanciaFile) }),
+    [alta, altaDocumentFile, altaConstanciaFile]
   );
   const altaUsoCfdiOptions = useMemo(
     () => getUsosCfdiParaRegimen(alta.regimenClave).map(formatUsoCfdiOption),
@@ -1203,6 +1205,7 @@ function App() {
     setCapture(emptyCapture());
     setAlta(emptyAlta());
     setAltaDocumentFile(null);
+    setAltaConstanciaFile(null);
     setVendedorCatalog([]);
     setAseguradoCatalog([]);
     setLoading(false);
@@ -1760,7 +1763,7 @@ function App() {
       return;
     }
 
-    if (!isAltaComplete(alta, { hasConstancia: altaDocumentFile?.docType === CONSTANCIA_DOCUMENT_ID })) {
+    if (!isAltaComplete(alta, { hasConstancia: hasConstanciaDocument(altaDocumentFile, altaConstanciaFile) })) {
       openErrorModal('Faltan datos', 'Completa todos los campos requeridos.');
       return;
     }
@@ -1818,6 +1821,7 @@ function App() {
 
     setAlta(emptyAlta());
     setAltaDocumentFile(null);
+    setAltaConstanciaFile(null);
   }
 
   const captureMatchClass = `status-chip ${matchResult.tone}`;
@@ -2501,17 +2505,10 @@ function App() {
               </div>
             </div>
 
-            <div className="form-divider">
-              {alta.requiereFactura ? 'Constancia de situación fiscal' : 'Documento del asegurado'}
-              {!alta.requiereFactura ? ' (opcional)' : <span className="required-mark"> *</span>}
-            </div>
+            <div className="form-divider">Documento del asegurado (opcional)</div>
             <div className="upload-card">
               <label className="dropzone">
-                <strong>
-                  {alta.requiereFactura
-                    ? 'Sube la constancia de situación fiscal'
-                    : 'Sube RFC, constancia de situación fiscal, comprobante de domicilio o INE'}
-                </strong>
+                <strong>Sube RFC, constancia de situación fiscal, comprobante de domicilio o INE</strong>
                 <small>PDF, JPG o PNG · la IA llena el formulario y tú lo complementas</small>
                 <input
                   type="file"
@@ -2709,6 +2706,61 @@ function App() {
                 </button>
               </div>
             </div>
+            {alta.requiereFactura ? (
+              <div className="mini-field">
+                {altaDocumentFile?.docType === CONSTANCIA_DOCUMENT_ID ? (
+                  <span className="pill tone-ok">Constancia de situación fiscal ya cargada arriba</span>
+                ) : (
+                  <div className="upload-card">
+                    <label>
+                      Constancia de situación fiscal <span className="required-mark">*</span>
+                    </label>
+                    <label className="dropzone">
+                      <strong>Sube la constancia de situación fiscal</strong>
+                      <small>PDF, JPG o PNG</small>
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                        onChange={(event) => {
+                          const selected = Array.from(event.target.files || []);
+                          if (!selected.length) return;
+                          const file = selected[0];
+                          setAltaConstanciaFile({
+                            file,
+                            name: file.name,
+                            type: file.type,
+                            sizeMb: (file.size / 1048576).toFixed(1),
+                            cat: 'alta-constancia'
+                          });
+                        }}
+                      />
+                    </label>
+                  </div>
+                )}
+                {/* Rendered outside the branch above: a constancia uploaded here must
+                    stay visible and removable even if the general document is later
+                    typed as a constancia and satisfies the requirement on its own. */}
+                {altaConstanciaFile ? (
+                  <div className="upload-files">
+                    <div className="upload-file">
+                      <div className="upload-file-meta">
+                        <strong>{altaConstanciaFile.name}</strong>
+                        <span>
+                          {altaConstanciaFile.cat.toUpperCase()} · {altaConstanciaFile.sizeMb} MB · {altaConstanciaFile.type || 'archivo'}
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        className="ghost-button danger"
+                        onClick={() => setAltaConstanciaFile(null)}
+                      >
+                        Quitar
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
             <div className="ramo-grid alta-grid">
               <div className="mini-field">
                 <label>
@@ -2768,6 +2820,7 @@ function App() {
                 onClick={() => {
                   setAlta(emptyAlta());
                   setAltaDocumentFile(null);
+                  setAltaConstanciaFile(null);
                 }}
               >
                 Limpiar
