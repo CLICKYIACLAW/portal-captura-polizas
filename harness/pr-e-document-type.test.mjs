@@ -6,6 +6,7 @@ import {
   CONSTANCIA_DOCUMENT_ID,
   applyDetectedDocumentType,
   findAltaDocumentType,
+  hasConstanciaDocument,
   resolveDetectedDocumentType
 } from '../src/lib/altaDocumentTypes.js';
 import { buildAltaAnthropicPrompt, getAltaMissingKeys, getAltaSaveHint } from '../src/lib/utils.js';
@@ -149,12 +150,36 @@ describe('PR E — alta document type catalog', () => {
   });
 });
 
-describe('PR E — App.jsx gates on docType, not on the mere presence of a file', () => {
-  it('uses CONSTANCIA_DOCUMENT_ID and docType for the save/complete gates', async () => {
+describe('PR E — hasConstanciaDocument helper', () => {
+  it('returns true when the general document is a constancia and there is no second file', () => {
+    assert.equal(hasConstanciaDocument({ docType: CONSTANCIA_DOCUMENT_ID }, null), true);
+  });
+
+  it('returns true when the general document is an INE but the constancia slot has a file', () => {
+    assert.equal(hasConstanciaDocument({ docType: 'ine' }, { cat: 'alta-constancia' }), true);
+  });
+
+  it('returns false when the general document is an INE and the constancia slot is empty', () => {
+    assert.equal(hasConstanciaDocument({ docType: 'ine' }, null), false);
+  });
+
+  it('returns false without throwing when both arguments are null or undefined', () => {
+    assert.equal(hasConstanciaDocument(null, null), false);
+    assert.equal(hasConstanciaDocument(undefined, undefined), false);
+    assert.equal(hasConstanciaDocument(null, undefined), false);
+  });
+
+  it('returns false when a file exists but its docType is empty and there is no constancia slot file', () => {
+    assert.equal(hasConstanciaDocument({ docType: '' }, null), false);
+  });
+});
+
+describe('PR E — App.jsx gates through hasConstanciaDocument', () => {
+  it('uses the helper with both files for the save/complete/hint gates', async () => {
     const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
-    assert.match(appSource, /import\s+\{[^}]*CONSTANCIA_DOCUMENT_ID[^}]*\}\s+from\s+['"]\.\/lib\/altaDocumentTypes['"]/);
-    assert.match(appSource, /docType\s*===\s*CONSTANCIA_DOCUMENT_ID/);
-    assert.match(appSource, /hasConstancia:\s*altaDocumentFile\?\.docType\s*===\s*CONSTANCIA_DOCUMENT_ID/);
+    assert.match(appSource, /import\s+\{[^}]*hasConstanciaDocument[^}]*\}\s+from\s+['"]\.\/lib\/altaDocumentTypes['"]/);
+    assert.match(appSource, /hasConstancia:\s*hasConstanciaDocument\(altaDocumentFile,\s*altaConstanciaFile\)/);
+    assert.doesNotMatch(appSource, /hasConstancia:\s*altaDocumentFile\?\.docType\s*===\s*CONSTANCIA_DOCUMENT_ID/);
     assert.doesNotMatch(appSource, /hasConstancia:\s*Boolean\(altaDocumentFile\)/);
     assert.doesNotMatch(appSource, /hasDocument:\s*Boolean\(altaDocumentFile\)/);
   });
@@ -196,6 +221,62 @@ describe('PR E — App.jsx gates on docType, not on the mere presence of a file'
   });
 });
 
+describe('PR E — general document dropzone copy', () => {
+  it('advertises all four accepted documents unconditionally', async () => {
+    const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
+    assert.match(appSource, /Sube RFC, constancia de situación fiscal, comprobante de domicilio o INE/);
+    assert.doesNotMatch(appSource, /alta\.requiereFactura\s*\?\s*['"]Sube la constancia de situación fiscal['"]/);
+  });
+
+  it('keeps the section heading as "Documento del asegurado (opcional)" regardless of factura', async () => {
+    const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
+    assert.match(appSource, /Documento del asegurado \(opcional\)/);
+    assert.doesNotMatch(
+      appSource,
+      /alta\.requiereFactura\s*\?\s*['"]Constancia de situación fiscal['"]\s*:\s*['"]Documento del asegurado['"]/
+    );
+  });
+});
+
+describe('PR E — dedicated constancia upload slot', () => {
+  it('declares altaConstanciaFile state and a setter', async () => {
+    const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
+    assert.match(appSource, /const\s+\[altaConstanciaFile,\s*setAltaConstanciaFile\]\s*=\s*useState\(null\)/);
+  });
+
+  it('renders the dedicated slot only when factura is required', async () => {
+    const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
+    assert.match(appSource, /alta\.requiereFactura\s*\?\s*\([\s\S]*?setAltaConstanciaFile[\s\S]*?\)\s*:\s*null/);
+  });
+
+  it('shows a confirmation pill when the general upload already is a constancia', async () => {
+    const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
+    assert.match(appSource, /altaDocumentFile\?\.docType\s*===\s*CONSTANCIA_DOCUMENT_ID/);
+    assert.match(appSource, /<span\s+className=["']pill tone-ok["']>[\s\S]*?constancia[\s\S]*?<\/span>/);
+  });
+
+  it('has its own file input that populates altaConstanciaFile', async () => {
+    const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
+    assert.match(appSource, /<input\s+type=["']file["'][\s\S]*?onChange=\{\s*\(event\)\s*=>\s*\{[\s\S]*?setAltaConstanciaFile/);
+  });
+
+  it('has a Quitar button that clears the dedicated constancia file', async () => {
+    const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
+    assert.match(appSource, /onClick=\{\s*\(\)\s*=>\s*setAltaConstanciaFile\(null\)\s*\}/);
+  });
+});
+
+describe('PR E — reset calls keep the dedicated file from leaking across records', () => {
+  it('clears altaConstanciaFile alongside altaDocumentFile in every reset path', async () => {
+    const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
+    const occurrences = (appSource.match(/setAltaConstanciaFile\(null\)/g) || []).length;
+    assert.equal(occurrences, 4, 'expected three reset paths plus the dedicated-slot Quitar button');
+    assert.match(appSource, /function handleLogout[\s\S]*?setAltaDocumentFile\(null\)[\s\S]*?setAltaConstanciaFile\(null\)/);
+    assert.match(appSource, /setAlta\(emptyAlta\(\)\);\s*setAltaDocumentFile\(null\);\s*setAltaConstanciaFile\(null\);/);
+    assert.match(appSource, /Limpiar[\s\S]*?setAltaConstanciaFile\(null\)/);
+  });
+});
+
 describe('PR E — applyDetectedDocumentType (stale-choice guard)', () => {
   it('applies an AI detection when no type was chosen yet', () => {
     const current = { name: 'doc.pdf', docType: '', docTypeSource: '' };
@@ -225,5 +306,29 @@ describe('PR E — applyDetectedDocumentType (stale-choice guard)', () => {
     assert.strictEqual(applyDetectedDocumentType(current, ''), current);
     assert.equal(applyDetectedDocumentType(null, 'constancia'), null);
     assert.equal(applyDetectedDocumentType(undefined, 'constancia'), undefined);
+  });
+});
+
+describe('PR E — a separately uploaded constancia stays removable', () => {
+  it('renders the uploaded constancia row outside the already-satisfied branch', async () => {
+    const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
+    const blockStart = appSource.indexOf('{alta.requiereFactura ? (');
+    assert.ok(blockStart !== -1, 'expected to find the fiscal constancia block');
+    const block = appSource.slice(blockStart, blockStart + 3000);
+
+    const pillOffset = block.indexOf('ya cargada arriba');
+    const removeOffset = block.indexOf('setAltaConstanciaFile(null)');
+    assert.ok(pillOffset !== -1, 'expected the already-uploaded confirmation pill');
+    assert.ok(removeOffset !== -1, 'expected a control that clears altaConstanciaFile');
+
+    // The remove control must NOT be nested in the else branch of the pill, or a
+    // file uploaded here becomes invisible and unremovable the moment the general
+    // document is typed as a constancia.
+    const elseBranchStart = block.indexOf(') : (', pillOffset);
+    const elseBranchEnd = block.indexOf('\n                )}', elseBranchStart);
+    assert.ok(
+      removeOffset < elseBranchStart || removeOffset > elseBranchEnd,
+      'expected the uploaded-constancia row and its Quitar button to render regardless of the general document type'
+    );
   });
 });
