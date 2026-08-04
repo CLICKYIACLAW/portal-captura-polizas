@@ -5,11 +5,14 @@ import {
   mapBiVendorOption,
   findVendorByClave
 } from '../src/lib/api.js';
-import { hasAssignmentTupleChanged } from '../src/lib/utils.js';
+import { applyAssignmentSelection, hasAssignmentTupleChanged } from '../src/lib/utils.js';
 import {
   emptyCapture,
   activateGenericAssignment,
-  returnToManualAssignment
+  getGenericAssignmentToggleState,
+  returnToManualAssignment,
+  selectCaptureGerencia,
+  selectCaptureLine
 } from '../src/App.jsx';
 
 describe('PR A — generic capture assignment', () => {
@@ -68,6 +71,79 @@ describe('PR A — generic capture assignment', () => {
     it('treats missing/empty values as equal', () => {
       assert.equal(hasAssignmentTupleChanged({}, {}), false);
       assert.equal(hasAssignmentTupleChanged({ vendedor: '' }, { vendedor: '  ' }), false);
+    });
+  });
+
+  describe('A5 — context changes preserve the generic tuple', () => {
+    const genericTuple = {
+      vendedor: 'VG001 - Vendedor Genérico',
+      vendedorId: '99',
+      asegurado: 'VG001 - Vendedor Genérico'
+    };
+
+    it('preserves VG001 after a Línea change while generic mode is active', () => {
+      const current = {
+        ...emptyCapture(),
+        ...genericTuple,
+        assignmentMode: 'generic',
+        linea: 'Anterior',
+        gerencia: 'Anterior'
+      };
+
+      const next = selectCaptureLine(current, 'Nueva línea', current.layout.length);
+
+      assert.equal(next.assignmentMode, 'generic');
+      assert.equal(next.vendedor, genericTuple.vendedor);
+      assert.equal(next.vendedorId, genericTuple.vendedorId);
+      assert.equal(next.asegurado, genericTuple.asegurado);
+    });
+
+    it('preserves VG001 after a Gerencia change while generic mode is active', () => {
+      const current = {
+        ...emptyCapture(),
+        ...genericTuple,
+        assignmentMode: 'generic',
+        linea: 'Línea',
+        gerencia: 'Anterior'
+      };
+
+      const next = selectCaptureGerencia(current, 'Nueva gerencia', current.layout.length);
+
+      assert.equal(next.assignmentMode, 'generic');
+      assert.equal(next.vendedor, genericTuple.vendedor);
+      assert.equal(next.vendedorId, genericTuple.vendedorId);
+      assert.equal(next.asegurado, genericTuple.asegurado);
+    });
+
+    it('still clears the tuple after a Línea change in manual mode', () => {
+      const current = {
+        ...emptyCapture(),
+        vendedor: 'Vendedor manual',
+        vendedorId: '12',
+        asegurado: 'Asegurado manual',
+        linea: 'Anterior',
+        gerencia: 'Anterior'
+      };
+
+      const next = selectCaptureLine(current, 'Nueva línea', current.layout.length);
+
+      assert.equal(next.assignmentMode, 'manual');
+      assert.equal(next.vendedor, '');
+      assert.equal(next.vendedorId, '');
+      assert.equal(next.asegurado, '');
+    });
+  });
+
+  describe('A8 — generic assignment toggle availability', () => {
+    it('shows a neutral loading state instead of claiming VG001 is unavailable', () => {
+      assert.deepEqual(
+        getGenericAssignmentToggleState({
+          vendedoresLoading: true,
+          genericVendor: null,
+          assignmentMode: 'manual'
+        }),
+        { disabled: true, label: 'Cargando vendedores...' }
+      );
     });
   });
 

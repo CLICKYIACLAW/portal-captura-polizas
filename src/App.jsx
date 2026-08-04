@@ -175,6 +175,53 @@ export function returnToManualAssignment(current) {
   return { ...current, assignmentMode: 'manual' };
 }
 
+
+export function selectCaptureLine(current, value, layoutLength) {
+  const dependentPatch = {
+    gerencia: '',
+    ramo: '',
+    subramo: ''
+  };
+
+  if (current.assignmentMode !== 'generic') {
+    Object.assign(dependentPatch, {
+      vendedor: '',
+      vendedorId: '',
+      asegurado: ''
+    });
+  }
+
+  return applyAssignmentSelection(current, 'linea', value, dependentPatch, layoutLength);
+}
+
+export function selectCaptureGerencia(current, value, layoutLength) {
+  const dependentPatch = current.assignmentMode === 'generic'
+    ? {}
+    : { vendedor: '', vendedorId: '', asegurado: '' };
+
+  return applyAssignmentSelection(current, 'gerencia', value, dependentPatch, layoutLength);
+}
+
+export function getGenericAssignmentToggleState({ vendedoresLoading, genericVendor, assignmentMode }) {
+  if (vendedoresLoading) {
+    return { disabled: true, label: 'Cargando vendedores...' };
+  }
+
+  if (!genericVendor) {
+    return {
+      disabled: true,
+      label: 'No disponible: el catálogo no contiene VG001'
+    };
+  }
+
+  return {
+    disabled: false,
+    label: assignmentMode === 'generic'
+      ? 'Elegir vendedor manualmente'
+      : 'Usar vendedor genérico'
+  };
+}
+
 function normalizeTokens(value) {
   const stop = new Set(['sa', 'de', 'cv', 's', 'a', 'rl', 'sc', 'sapi', 'y', 'del', 'la', 'el']);
   return new Set(
@@ -836,6 +883,11 @@ function App() {
   );
   const selectedVendorId = String(capture.vendedorId || '').trim();
   const genericVendor = findVendorByClave(vendorOptions);
+  const genericAssignmentToggleState = getGenericAssignmentToggleState({
+    vendedoresLoading,
+    genericVendor,
+    assignmentMode: capture.assignmentMode
+  });
   const selectedRamoOption =
     normalizedRamoOptions.find((option) => option.value === String(capture.ramo || '')) || null;
   const selectedSubramoOption =
@@ -1680,14 +1732,10 @@ function App() {
               <button
                 type="button"
                 className="secondary-button"
-                disabled={!genericVendor}
+                disabled={genericAssignmentToggleState.disabled}
                 onClick={handleToggleAssignmentMode}
               >
-                {!genericVendor
-                  ? 'No disponible: el catálogo no contiene VG001'
-                  : capture.assignmentMode === 'generic'
-                    ? 'Elegir vendedor manualmente'
-                    : 'Usar vendedor genérico'}
+                {genericAssignmentToggleState.label}
               </button>
             </div>
             <div className="combo-grid">
@@ -1700,20 +1748,7 @@ function App() {
                   hint={`${lineOptions.length} opciones`}
                   onSelect={(value) =>
                     setCapture((current) =>
-                      applyAssignmentSelection(
-                        current,
-                        'linea',
-                        value,
-                        {
-                          gerencia: '',
-                          vendedor: '',
-                          asegurado: '',
-                          ramo: '',
-                          subramo: '',
-                          vendedorId: ''
-                        },
-                        POLIZA_LAYOUT_FIELDS.length
-                      )
+                      selectCaptureLine(current, value, POLIZA_LAYOUT_FIELDS.length)
                     )
                   }
                 />
@@ -1728,17 +1763,7 @@ function App() {
                   disabled={!capture.linea}
                   onSelect={(value) =>
                     setCapture((current) =>
-                      applyAssignmentSelection(
-                        current,
-                        'gerencia',
-                        value,
-                        {
-                          vendedor: '',
-                          vendedorId: '',
-                          asegurado: ''
-                        },
-                        POLIZA_LAYOUT_FIELDS.length
-                      )
+                      selectCaptureGerencia(current, value, POLIZA_LAYOUT_FIELDS.length)
                     )
                   }
                 />
