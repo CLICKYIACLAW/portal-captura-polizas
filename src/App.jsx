@@ -904,6 +904,53 @@ export function useGroupModal({
   };
 }
 
+export function useAseguradoModal({
+  setCapture,
+  aseguradoNames,
+  openAltaFromCapture,
+  openErrorModal,
+  normalizeText
+}) {
+  const [aseguradoModal, setAseguradoModal] = useState({ open: false, name: '' });
+
+  function openAseguradoModal() {
+    setAseguradoModal({ open: true, name: '' });
+  }
+
+  function closeAseguradoModal() {
+    setAseguradoModal({ open: false, name: '' });
+  }
+
+  function selectAseguradoSuggestion(name) {
+    setCapture((current) =>
+      applyAssignmentSelection(current, 'asegurado', name, {}, POLIZA_LAYOUT_FIELDS.length)
+    );
+    closeAseguradoModal();
+  }
+
+  function registerAseguradoFromCapture() {
+    const name = normalizeText(aseguradoModal.name);
+    if (!name) {
+      openErrorModal('Faltan datos', 'Escribe el nombre del asegurado.');
+      return;
+    }
+    if (findGroupNameMatches(aseguradoModal.name, aseguradoNames).length > 0) {
+      return;
+    }
+    openAltaFromCapture(name);
+    closeAseguradoModal();
+  }
+
+  return {
+    aseguradoModal,
+    setAseguradoModal,
+    openAseguradoModal,
+    closeAseguradoModal,
+    selectAseguradoSuggestion,
+    registerAseguradoFromCapture
+  };
+}
+
 function App() {
   const publishedVersion = `v${appPackage.version}`;
   const [executive, setExecutive] = useState(() => {
@@ -1003,6 +1050,21 @@ function App() {
     () => (aseguradoCatalog || []).map(getComboOption).filter((option) => option.label || option.value),
     [aseguradoCatalog]
   );
+  const aseguradoNames = normalizedAseguradoOptions.map((option) => option.label).filter(Boolean);
+  const {
+    aseguradoModal,
+    setAseguradoModal,
+    openAseguradoModal,
+    closeAseguradoModal,
+    selectAseguradoSuggestion,
+    registerAseguradoFromCapture
+  } = useAseguradoModal({
+    setCapture,
+    aseguradoNames,
+    openAltaFromCapture,
+    openErrorModal,
+    normalizeText
+  });
   const selectedVendorId = String(capture.vendedorId || '').trim();
   const genericVendor = findVendorByClave(vendorOptions);
   const genericAssignmentToggleState = getGenericAssignmentToggleState({
@@ -1040,6 +1102,11 @@ function App() {
     [groupModal.name, groupCatalog]
   );
   const canCreateGroup = Boolean(normalizeText(groupModal.name)) && groupMatches.length === 0;
+  const aseguradoModalMatches = useMemo(
+    () => findGroupNameMatches(aseguradoModal.name, aseguradoNames),
+    [aseguradoModal.name, aseguradoNames]
+  );
+  const canRegisterAsegurado = Boolean(normalizeText(aseguradoModal.name)) && aseguradoModalMatches.length === 0;
 
   async function handleLogin(event) {
     event.preventDefault();
@@ -1761,6 +1828,64 @@ function App() {
       </form>
     </Modal>
   );
+  const aseguradoModalNode = (
+    <Modal
+      open={aseguradoModal.open}
+      title="Registrar asegurado"
+      tone="neutral"
+      titleId="asegurado-modal-title"
+      onClose={closeAseguradoModal}
+      actions={
+        <>
+          <button type="button" className="ghost-button" onClick={closeAseguradoModal}>
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            form="asegurado-modal-form"
+            className="primary-button"
+            disabled={!canRegisterAsegurado}
+          >
+            Registrar asegurado
+          </button>
+        </>
+      }
+    >
+      <form
+        id="asegurado-modal-form"
+        className="group-modal-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          registerAseguradoFromCapture();
+        }}
+      >
+        <label htmlFor="asegurado-modal-name">Nombre del asegurado</label>
+        <input
+          id="asegurado-modal-name"
+          type="text"
+          value={aseguradoModal.name}
+          required
+          onChange={(event) => setAseguradoModal((current) => ({ ...current, name: event.target.value }))}
+        />
+        {aseguradoModalMatches.length ? (
+          <div className="group-suggestion-list">
+            <strong>Tal vez buscas a este asegurado</strong>
+            {aseguradoModalMatches.map(({ name }) => (
+              <button
+                key={name}
+                type="button"
+                className="group-suggestion-row"
+                onClick={() => selectAseguradoSuggestion(name)}
+              >
+                <span>{name}</span>
+                <span>Usar este asegurado</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </form>
+    </Modal>
+  );
   const errorModalNode = errorModal ? (
     <Modal
       open={Boolean(errorModal)}
@@ -1786,6 +1911,7 @@ function App() {
     return (
       <>
         {groupModalNode}
+        {aseguradoModalNode}
         {errorModalNode}
         <div className="login-screen">
           <div className="login-card">
@@ -1821,6 +1947,7 @@ function App() {
     return (
       <>
         {groupModalNode}
+        {aseguradoModalNode}
         {errorModalNode}
         <div className="app-shell loading">
           <div className="hero-card">
@@ -1836,6 +1963,7 @@ function App() {
   return (
     <>
       {groupModalNode}
+      {aseguradoModalNode}
       {errorModalNode}
       <div className={`app-shell ${captureLocked ? 'blocked' : ''}`}>
       <header className="topbar">
@@ -1969,37 +2097,46 @@ function App() {
                 </div>
               )}
               {capture.assignmentMode !== 'generic' ? (
-                <ComboField
-                  label="Asegurado"
-                  value={capture.asegurado}
-                  options={aseguradoCatalog}
-                  placeholder={
-                    aseguradosLoading
-                      ? 'Cargando asegurados...'
-                      : selectedVendorId
-                        ? 'Selecciona el asegurado'
-                        : 'Selecciona un vendedor primero'
-                  }
-                  hint={
-                    aseguradosLoading
-                      ? 'Cargando asegurados...'
-                      : selectedVendorId
-                        ? aseguradoCatalog.length
-                          ? `${aseguradoCatalog.length} opciones`
-                          : 'Sin asegurados'
-                        : 'Depende del vendedor'
-                  }
-                  disabled={aseguradosLoading || !selectedVendorId || !aseguradoCatalog.length}
-                  onSelect={(value) =>
-                    setCapture((current) =>
-                      applyAssignmentSelection(current, 'asegurado', value, {}, POLIZA_LAYOUT_FIELDS.length)
-                    )
-                  }
-                  actionLabel={(query) =>
-                    query ? `Dar de alta a «${query}»` : 'Dar de alta a un asegurado nuevo'
-                  }
-                  onAction={(query) => openAltaFromCapture(query)}
-                />
+                <>
+                  <ComboField
+                    label="Asegurado"
+                    value={capture.asegurado}
+                    options={aseguradoCatalog}
+                    placeholder={
+                      aseguradosLoading
+                        ? 'Cargando asegurados...'
+                        : selectedVendorId
+                          ? 'Selecciona el asegurado'
+                          : 'Selecciona un vendedor primero'
+                    }
+                    hint={
+                      aseguradosLoading
+                        ? 'Cargando asegurados...'
+                        : selectedVendorId
+                          ? aseguradoCatalog.length
+                            ? `${aseguradoCatalog.length} opciones`
+                            : 'Sin asegurados'
+                          : 'Depende del vendedor'
+                    }
+                    disabled={aseguradosLoading || !selectedVendorId || !aseguradoCatalog.length}
+                    onSelect={(value) =>
+                      setCapture((current) =>
+                        applyAssignmentSelection(current, 'asegurado', value, {}, POLIZA_LAYOUT_FIELDS.length)
+                      )
+                    }
+                  />
+                  <div className="mini-field asegurado-registration">
+                    <label>Nuevo asegurado</label>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      onClick={openAseguradoModal}
+                      disabled={!selectedVendorId || aseguradosLoading}
+                    >
+                      Registrar asegurado
+                    </button>
+                  </div>
+                </>
               ) : (
                 <div className="combo-field">
                   <label>Asegurado</label>
