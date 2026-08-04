@@ -1196,6 +1196,7 @@ function App() {
     setActiveTab('captura');
     setCapture(emptyCapture());
     setAlta(emptyAlta());
+    setAltaDocumentFile(null);
     setVendedorCatalog([]);
     setAseguradoCatalog([]);
     setLoading(false);
@@ -1777,6 +1778,7 @@ function App() {
       regimen: alta.regimen,
       regimenClave: alta.regimenClave,
       usoCfdi: alta.usoCfdi,
+      requiereFactura: alta.requiereFactura,
       linea: alta.linea,
       gerencia: alta.gerencia,
       vendedor: alta.vendedor,
@@ -1807,6 +1809,7 @@ function App() {
     }
 
     setAlta(emptyAlta());
+    setAltaDocumentFile(null);
   }
 
   const captureMatchClass = `status-chip ${matchResult.tone}`;
@@ -2715,7 +2718,14 @@ function App() {
               >
                 Guardar asegurado
               </button>
-              <button type="button" className="ghost-button" onClick={() => setAlta(emptyAlta())}>
+              <button
+                type="button"
+                className="ghost-button"
+                onClick={() => {
+                  setAlta(emptyAlta());
+                  setAltaDocumentFile(null);
+                }}
+              >
                 Limpiar
               </button>
             </div>

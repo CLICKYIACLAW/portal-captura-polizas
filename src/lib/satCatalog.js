@@ -41,7 +41,9 @@ export const REGIMENES_FISCALES = [
   { clave: '626', nombre: 'Régimen Simplificado de Confianza' }
 ];
 
+// G/I-prefixed usos de CFDI = acquisition and investment uses (Gastos / Inversión).
 const G_I_REGIMENES = ['601', '603', '606', '612', '620', '621', '622', '623', '624', '625', '626'];
+// D-prefixed usos de CFDI = personal deductions available to individuals.
 const D_REGIMENES = ['605', '606', '607', '608', '611', '612', '614', '615', '625'];
 const TODOS_LOS_REGIMENES = REGIMENES_FISCALES.map((r) => r.clave);
 

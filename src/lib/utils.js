@@ -234,7 +234,7 @@ const ALTA_NAME_FIELDS = {
   moral: ['razon']
 };
 
-const ALTA_FISCAL_REQUIRED = ['rfc', 'curp', 'giro', 'regimen', 'usoCfdi'];
+const ALTA_FISCAL_REQUIRED = ['rfc', 'curp', 'giro', 'regimenClave', 'usoCfdi'];
 
 const ALTA_LABELS = {
   linea: 'línea',
@@ -257,6 +257,7 @@ const ALTA_LABELS = {
   curp: 'CURP',
   giro: 'giro',
   regimen: 'régimen fiscal',
+  regimenClave: 'régimen fiscal',
   usoCfdi: 'uso de CFDI',
   documento: 'documento del asegurado'
 };

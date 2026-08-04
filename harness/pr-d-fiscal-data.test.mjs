@@ -140,13 +140,13 @@ describe('PR D — alta conditional required/invalid logic', () => {
       assert.ok(!without.includes('rfc'));
       assert.ok(!without.includes('curp'));
       assert.ok(!without.includes('giro'));
-      assert.ok(!without.includes('regimen'));
+      assert.ok(!without.includes('regimenClave'));
       assert.ok(!without.includes('usoCfdi'));
 
       assert.ok(withFactura.includes('rfc'));
       assert.ok(withFactura.includes('curp'));
       assert.ok(withFactura.includes('giro'));
-      assert.ok(withFactura.includes('regimen'));
+      assert.ok(withFactura.includes('regimenClave'));
       assert.ok(withFactura.includes('usoCfdi'));
     });
 
@@ -185,13 +185,28 @@ describe('PR D — alta conditional required/invalid logic', () => {
         curp: 'CURP1234567890123',
         giro: 'Giro',
         regimen: '626 - Régimen Simplificado de Confianza',
+        regimenClave: '626',
         usoCfdi: 'G03 - Gastos en general'
       }));
       assert.ok(!missing.includes('rfc'));
       assert.ok(!missing.includes('curp'));
       assert.ok(!missing.includes('giro'));
-      assert.ok(!missing.includes('regimen'));
+      assert.ok(!missing.includes('regimenClave'));
       assert.ok(!missing.includes('usoCfdi'));
+    });
+
+    it('reports regimenClave missing when only free-text regimen is present (OCR)', () => {
+      const missing = getAltaMissingKeys(baseAlta({
+        requiereFactura: true,
+        rfc: 'XAXX010101000',
+        curp: 'CURP1234567890123',
+        giro: 'Giro',
+        regimen: '626 - Régimen Simplificado de Confianza',
+        regimenClave: '',
+        usoCfdi: 'G03 - Gastos en general'
+      }));
+      assert.ok(!missing.includes('regimen'));
+      assert.ok(missing.includes('regimenClave'));
     });
 
     it('adds synthetic documento key when requiereFactura && !hasDocument', () => {
@@ -247,12 +262,12 @@ describe('PR D — alta conditional required/invalid logic', () => {
     });
 
     it('returns false when document is required but missing', () => {
-      const alta = baseAlta({ requiereFactura: true, rfc: 'GODE561231GR8', curp: 'CURP', giro: 'G', regimen: '626 - X', usoCfdi: 'G03 - X' });
+      const alta = baseAlta({ requiereFactura: true, rfc: 'GODE561231GR8', curp: 'CURP', giro: 'G', regimen: '626 - X', regimenClave: '626', usoCfdi: 'G03 - X' });
       assert.equal(isAltaComplete(alta, { hasDocument: false }), false);
     });
 
     it('returns true when document is required and present', () => {
-      const alta = baseAlta({ requiereFactura: true, rfc: 'GODE561231GR8', curp: 'CURP', giro: 'G', regimen: '626 - X', usoCfdi: 'G03 - X' });
+      const alta = baseAlta({ requiereFactura: true, rfc: 'GODE561231GR8', curp: 'CURP', giro: 'G', regimen: '626 - X', regimenClave: '626', usoCfdi: 'G03 - X' });
       assert.equal(isAltaComplete(alta, { hasDocument: true }), true);
     });
   });
@@ -264,7 +279,8 @@ describe('PR D — alta conditional required/invalid logic', () => {
         rfc: 'GODE561231GR8',
         curp: 'CURP1234567890123',
         giro: 'Giro',
-        regimen: '626 - Régimen Simplificado de Confianza'
+        regimen: '626 - Régimen Simplificado de Confianza',
+        regimenClave: '626'
       }));
       assert.ok(hint.toLowerCase().includes('uso de cfdi'));
     });
@@ -276,6 +292,7 @@ describe('PR D — alta conditional required/invalid logic', () => {
         curp: 'CURP1234567890123',
         giro: 'Giro',
         regimen: '626 - Régimen Simplificado de Confianza',
+        regimenClave: '626',
         usoCfdi: 'G03 - Gastos en general'
       }), { hasDocument: false });
       assert.ok(hint.toLowerCase().includes('documento del asegurado'));
@@ -345,7 +362,50 @@ describe('PR D — Alta fiscal-data UI source scan', () => {
     assert.match(region, /label=\{alta\.requiereFactura \? 'Régimen fiscal \*' : 'Régimen fiscal'\}/);
     assert.match(region, /label="Uso de CFDI \*"/);
 
-    // No unconditional required-mark in the fiscal section.
-    assert.doesNotMatch(region, /required-mark(?!.*alta\.requiereFactura)/s);
+    // No unconditional required-mark in the fiscal section: every
+    // required-mark must be preceded (in this region) by alta.requiereFactura.
+    const requiredMarkChunks = region.split('required-mark');
+    requiredMarkChunks.shift();
+    assert.ok(
+      requiredMarkChunks.every((chunk) => chunk.includes('alta.requiereFactura')),
+      'expected every fiscal required-mark to be gated by alta.requiereFactura'
+    );
+  });
+
+  it('resets altaDocumentFile when starting a fresh alta', async () => {
+    const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
+    assert.match(
+      appSource,
+      /function saveAlta\(.*?\)\s*\{[\s\S]*?setAlta\(emptyAlta\(\)\);\s*setAltaDocumentFile\(null\);/,
+      'expected saveAlta success path to clear alta and altaDocumentFile together'
+    );
+    assert.match(
+      appSource,
+      /onClick=\{\(\) => \{\s*setAlta\(emptyAlta\(\)\);\s*setAltaDocumentFile\(null\);\s*\}\}[\s\S]*?Limpiar/,
+      'expected Limpiar handler to clear altaDocumentFile'
+    );
+  });
+
+  it('clears altaDocumentFile on logout so a document cannot leak to the next user', async () => {
+    const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
+    const logoutStart = appSource.indexOf('function handleLogout(');
+    assert.ok(logoutStart !== -1, 'expected to find handleLogout');
+    const logoutBody = appSource.slice(logoutStart, appSource.indexOf('\n  }', logoutStart));
+    assert.match(
+      logoutBody,
+      /setAltaDocumentFile\(null\);/,
+      'expected handleLogout to clear altaDocumentFile, otherwise the uploaded constancia survives a session change and silently satisfies the factura document gate for the next user'
+    );
+  });
+
+  it('sends requiereFactura in the saveAlta payload', async () => {
+    const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
+    const payloadMatch = appSource.match(/const payload = \{[\s\S]*?\};/);
+    assert.ok(payloadMatch, 'expected to find saveAlta payload object');
+    assert.match(
+      payloadMatch[0],
+      /requiereFactura:\s*alta\.requiereFactura,/,
+      'expected payload to include requiereFactura'
+    );
   });
 });
