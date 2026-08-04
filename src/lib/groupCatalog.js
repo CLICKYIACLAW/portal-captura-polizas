@@ -22,7 +22,7 @@ export function findGroupNameMatches(query, catalog) {
     let rank = null;
     if (normalized === normalizedQuery) {
       rank = 'exact';
-    } else if (normalized.startsWith(normalizedQuery) || normalizedQuery.startsWith(normalized)) {
+    } else if (normalized.startsWith(normalizedQuery)) {
       rank = 'prefix';
     } else if (normalized.includes(normalizedQuery) || normalizedQuery.includes(normalized)) {
       rank = 'substring';

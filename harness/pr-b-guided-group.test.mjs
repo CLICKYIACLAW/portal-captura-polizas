@@ -8,6 +8,10 @@ const groupCatalogModule = await import('../src/lib/groupCatalog.js').catch((err
   if (error.code === 'ERR_MODULE_NOT_FOUND') return null;
   throw error;
 });
+const utilsModule = await import('../src/lib/utils.js').catch((error) => {
+  if (error.code === 'ERR_MODULE_NOT_FOUND') return null;
+  throw error;
+});
 
 // B5: group-modal hook exported from App.jsx
 const appModule = await import('../src/App.jsx').catch((error) => {
@@ -143,6 +147,14 @@ describe('groupCatalog', () => {
       assert.ok(result.some((item) => item.name === 'grupo  beta' && item.rank === 'substring'));
     });
 
+    it('ranks a catalog name contained by the query as substring, while forward prefix remains prefix', () => {
+      const reverseContainment = groupCatalogModule?.findGroupNameMatches('Grupo A Norte', ['Grupo A']);
+      assert.deepEqual(reverseContainment, [{ name: 'Grupo A', rank: 'substring' }]);
+
+      const forwardPrefix = groupCatalogModule?.findGroupNameMatches('Grupo A', ['Grupo A Norte']);
+      assert.deepEqual(forwardPrefix, [{ name: 'Grupo A Norte', rank: 'prefix' }]);
+    });
+
     it('excludes entries with no match', () => {
       const result = groupCatalogModule?.findGroupNameMatches('xyz', catalog);
       assert.deepEqual(result, []);
@@ -183,9 +195,20 @@ describe('guided group UI', () => {
   it('keeps the Alta group combo selection-only and provides a dedicated modal flow', async () => {
     const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
     const altaGroupRegion = appSource.slice(appSource.indexOf('label="Grupo *"'), appSource.indexOf('</div>', appSource.indexOf('label="Grupo *"')));
+    const groupModalStart = appSource.indexOf('const groupModalNode = (');
+    const createActionStart = appSource.lastIndexOf('<button', appSource.indexOf('form="group-modal-form"', groupModalStart));
+    const createActionEnd = appSource.indexOf('</button>', createActionStart) + '</button>'.length;
+    const createAction = appSource.slice(createActionStart, createActionEnd);
+    const openActionStart = appSource.lastIndexOf('<button', appSource.indexOf('onClick={openGroupModal}'));
+    const openActionEnd = appSource.indexOf('</button>', openActionStart) + '</button>'.length;
+    const openAction = appSource.slice(openActionStart, openActionEnd);
 
     assert.doesNotMatch(altaGroupRegion, /actionLabel|onAction/);
-    assert.match(appSource, /Registrar grupo/);
+    assert.match(openAction, />\s*Registrar grupo\s*</);
+    assert.match(createAction, /type="submit"/);
+    assert.match(createAction, /form="group-modal-form"/);
+    assert.match(createAction, /\{groupModal\.submitting \? 'Guardando\.\.\.' : 'Dar de alta grupo'\}/);
+    assert.doesNotMatch(createAction, /Registrar grupo/);
     assert.match(appSource, /Tal vez buscas este grupo/);
     assert.match(appSource, /titleId="group-modal-title"/);
   });
@@ -220,7 +243,7 @@ describe('useGroupModal', () => {
       createGrupo: mocks.createGrupo,
       openErrorModal: mocks.openErrorModal,
       pushToast: mocks.pushToast,
-      normalizeText: groupCatalogModule?.normalizeGroupName
+      normalizeText: utilsModule?.normalizeText
     });
     captured = { ...result, alta, groupCatalog };
     return createElement('div', null, JSON.stringify({ groupModal: result.groupModal, alta }));
@@ -276,18 +299,18 @@ describe('useGroupModal', () => {
     );
     await act(() => captured.openGroupModal());
     // name matches nothing
-    await act(() => captured.setGroupModal((current) => ({ ...current, name: 'Nuevo grupo' })));
+    await act(() => captured.setGroupModal((current) => ({ ...current, name: '  Nuevo   grupo  ' })));
     await act(async () => {
       await captured.createGroupFromAlta();
     });
     assert.equal(captured.groupModal.open, false);
     assert.equal(captured.groupModal.submitting, false);
-    assert.equal(captured.alta.grupo, 'nuevo grupo');
-    assert.ok(captured.groupCatalog.includes('nuevo grupo'));
+    assert.equal(captured.alta.grupo, 'Nuevo grupo');
+    assert.ok(captured.groupCatalog.includes('Nuevo grupo'));
     assert.equal(mocks.toastCalls.length, 1);
-    assert.ok(mocks.toastCalls[0].includes('nuevo grupo'));
+    assert.ok(mocks.toastCalls[0].includes('Nuevo grupo'));
     assert.deepEqual(mocks.createGrupoCalls[0], {
-      nombre: 'nuevo grupo',
+      nombre: 'Nuevo grupo',
       linea: 'Autos',
       gerencia: 'Norte',
       vendedor: 'V1'

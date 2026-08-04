@@ -1584,7 +1584,7 @@ function App() {
             className="primary-button"
             disabled={!canCreateGroup || groupModal.submitting}
           >
-            {groupModal.submitting ? 'Guardando...' : 'Registrar grupo'}
+            {groupModal.submitting ? 'Guardando...' : 'Dar de alta grupo'}
           </button>
         </>
       }
