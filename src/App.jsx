@@ -49,6 +49,12 @@ import {
   splitName
 } from './lib/utils';
 import { findGroupNameMatches } from './lib/groupCatalog';
+import {
+  REGIMENES_FISCALES,
+  formatRegimenOption,
+  formatUsoCfdiOption,
+  getUsosCfdiParaRegimen
+} from './lib/satCatalog';
 
 const TAB_IDS = ['captura', 'asegurados', 'polizas', 'bitacora'];
 const TAB_LABELS = {
@@ -129,7 +135,30 @@ function emptyAlta() {
     estado: '',
     estadoDerivado: false,
     giro: '',
-    regimen: ''
+    regimen: '',
+    regimenClave: '',
+    requiereFactura: false,
+    usoCfdi: ''
+  };
+}
+
+/**
+ * Selects a Régimen Fiscal for the Alta form. If the previously chosen Uso de
+ * CFDI is no longer compatible with the newly selected régimen (per SAT's
+ * c_UsoCFDI/c_RegimenFiscal compatibility matrix), it is cleared so the form
+ * can never hold a régimen/uso-CFDI pair SAT would reject at stamping time.
+ */
+export function selectAltaRegimen(current, value) {
+  const selected = REGIMENES_FISCALES.find((regimen) => formatRegimenOption(regimen) === value);
+  const nextClave = selected?.clave || '';
+  const compatibleUsos = getUsosCfdiParaRegimen(nextClave).map(formatUsoCfdiOption);
+  const usoCfdiStillValid = Boolean(current.usoCfdi) && compatibleUsos.includes(current.usoCfdi);
+
+  return {
+    ...current,
+    regimen: value,
+    regimenClave: nextClave,
+    usoCfdi: usoCfdiStillValid ? current.usoCfdi : ''
   };
 }
 
@@ -970,11 +999,21 @@ function App() {
   const [toast, setToast] = useState('');
   const [capture, setCapture] = useState(emptyCapture());
   const [alta, setAlta] = useState(emptyAlta());
-  const altaNotes = useMemo(() => buildAltaFieldNotes(alta), [alta]);
-  const altaComplete = useMemo(() => isAltaComplete(alta), [alta]);
-  const altaHint = useMemo(() => getAltaSaveHint(alta), [alta]);
-  const [altaReturnToCapture, setAltaReturnToCapture] = useState(false);
   const [altaDocumentFile, setAltaDocumentFile] = useState(null);
+  const altaNotes = useMemo(() => buildAltaFieldNotes(alta), [alta]);
+  const altaComplete = useMemo(
+    () => isAltaComplete(alta, { hasDocument: Boolean(altaDocumentFile) }),
+    [alta, altaDocumentFile]
+  );
+  const altaHint = useMemo(
+    () => getAltaSaveHint(alta, { hasDocument: Boolean(altaDocumentFile) }),
+    [alta, altaDocumentFile]
+  );
+  const altaUsoCfdiOptions = useMemo(
+    () => getUsosCfdiParaRegimen(alta.regimenClave).map(formatUsoCfdiOption),
+    [alta.regimenClave]
+  );
+  const [altaReturnToCapture, setAltaReturnToCapture] = useState(false);
   const [readingDocumentLabel, setReadingDocumentLabel] = useState('');
   const [bootVersion, setBootVersion] = useState('React + MySQL · seed local');
   const [ramoCatalog, setRamoCatalog] = useState([]);
@@ -1712,7 +1751,7 @@ function App() {
       return;
     }
 
-    if (!isAltaComplete(alta)) {
+    if (!isAltaComplete(alta, { hasDocument: Boolean(altaDocumentFile) })) {
       openErrorModal('Faltan datos', 'Completa todos los campos requeridos.');
       return;
     }
@@ -1736,6 +1775,8 @@ function App() {
       estado: alta.estado,
       giro: alta.giro,
       regimen: alta.regimen,
+      regimenClave: alta.regimenClave,
+      usoCfdi: alta.usoCfdi,
       linea: alta.linea,
       gerencia: alta.gerencia,
       vendedor: alta.vendedor,
@@ -2449,7 +2490,10 @@ function App() {
               </div>
             </div>
 
-            <div className="form-divider">Documento del asegurado (opcional)</div>
+            <div className="form-divider">
+              Documento del asegurado
+              {!alta.requiereFactura ? ' (opcional)' : <span className="required-mark"> *</span>}
+            </div>
             <div className="upload-card">
               <label className="dropzone">
                 <strong>Sube RFC, constancia de situación fiscal, comprobante de domicilio o INE</strong>
@@ -2599,26 +2643,66 @@ function App() {
             </div>
 
             <div className="form-divider">Datos fiscales</div>
+            <div className="mini-field">
+              <label>¿Requiere factura?</label>
+              <div className="type-switch">
+                <button
+                  type="button"
+                  className={alta.requiereFactura ? 'switch active' : 'switch'}
+                  onClick={() => setAlta((current) => ({ ...current, requiereFactura: true }))}
+                >
+                  Sí
+                </button>
+                <button
+                  type="button"
+                  className={!alta.requiereFactura ? 'switch active' : 'switch'}
+                  onClick={() => setAlta((current) => ({ ...current, requiereFactura: false }))}
+                >
+                  No
+                </button>
+              </div>
+            </div>
             <div className="ramo-grid alta-grid">
               <div className="mini-field">
                 <label>
-                  <span>RFC</span>
+                  <span>RFC {alta.requiereFactura ? <span className="required-mark">*</span> : null}</span>
                   {altaNotes.rfc ? <span className={'pill tone-' + altaNotes.rfc.tone}>{altaNotes.rfc.text}</span> : null}
                 </label>
                 <input type="text" value={alta.rfc} onChange={(e) => setAlta((current) => ({ ...current, rfc: e.target.value }))} />
               </div>
               <div className="mini-field">
-                <label>CURP</label>
+                <label>CURP {alta.requiereFactura ? <span className="required-mark">*</span> : null}</label>
                 <input type="text" value={alta.curp} onChange={(e) => setAlta((current) => ({ ...current, curp: e.target.value }))} />
               </div>
               <div className="mini-field">
-                <label>Giro</label>
+                <label>Giro {alta.requiereFactura ? <span className="required-mark">*</span> : null}</label>
                 <input type="text" value={alta.giro} onChange={(e) => setAlta((current) => ({ ...current, giro: e.target.value }))} />
               </div>
-              <div className="mini-field">
-                <label>Régimen fiscal</label>
-                <input type="text" value={alta.regimen} onChange={(e) => setAlta((current) => ({ ...current, regimen: e.target.value }))} />
-              </div>
+              <ComboField
+                label={alta.requiereFactura ? 'Régimen fiscal *' : 'Régimen fiscal'}
+                value={alta.regimen}
+                options={REGIMENES_FISCALES.map(formatRegimenOption)}
+                placeholder="Selecciona el régimen fiscal"
+                hint={`${REGIMENES_FISCALES.length} opciones`}
+                onSelect={(value) => setAlta((current) => selectAltaRegimen(current, value))}
+              />
+              {alta.requiereFactura ? (
+                <ComboField
+                  label="Uso de CFDI *"
+                  value={alta.usoCfdi}
+                  options={altaUsoCfdiOptions}
+                  placeholder={
+                    alta.regimenClave ? 'Selecciona el uso de CFDI' : 'Selecciona un régimen primero'
+                  }
+                  hint={
+                    alta.regimenClave
+                      ? `${altaUsoCfdiOptions.length} opciones`
+                      : 'Depende del régimen fiscal'
+                  }
+                  disabled={!alta.regimenClave}
+                  onSelect={(value) => setAlta((current) => ({ ...current, usoCfdi: value }))}
+                />
+              ) : null}
             </div>
 
             {altaHint ? <p className="muted">{altaHint}</p> : null}
