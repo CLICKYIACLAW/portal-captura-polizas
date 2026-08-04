@@ -234,6 +234,8 @@ const ALTA_NAME_FIELDS = {
   moral: ['razon']
 };
 
+const ALTA_FISCAL_REQUIRED = ['rfc', 'curp', 'giro', 'regimenClave', 'usoCfdi'];
+
 const ALTA_LABELS = {
   linea: 'línea',
   gerencia: 'gerencia',
@@ -251,7 +253,13 @@ const ALTA_LABELS = {
   apM: 'apellido materno',
   nombres: 'nombre(s)',
   razon: 'razón social',
-  curp: 'CURP'
+  rfc: 'RFC',
+  curp: 'CURP',
+  giro: 'giro',
+  regimen: 'régimen fiscal',
+  regimenClave: 'régimen fiscal',
+  usoCfdi: 'uso de CFDI',
+  documento: 'documento del asegurado'
 };
 
 function isEmptyAltaValue(value) {
@@ -260,15 +268,21 @@ function isEmptyAltaValue(value) {
   return false;
 }
 
-export function getAltaRequiredKeys(tipo) {
+export function getAltaRequiredKeys(alta) {
+  const tipo = alta?.tipo ?? 'fisica';
   const nameFields = ALTA_NAME_FIELDS[tipo] || ALTA_NAME_FIELDS.fisica;
-  return [...ALTA_REQUIRED_SHARED, ...nameFields];
+  const fiscalFields = alta?.requiereFactura ? ALTA_FISCAL_REQUIRED : [];
+  return [...ALTA_REQUIRED_SHARED, ...nameFields, ...fiscalFields];
 }
 
-export function getAltaMissingKeys(alta) {
+export function getAltaMissingKeys(alta, { hasDocument = true } = {}) {
   if (alta == null) return [];
-  const required = getAltaRequiredKeys(alta.tipo);
-  return required.filter((key) => isEmptyAltaValue(alta[key]));
+  const required = getAltaRequiredKeys(alta);
+  const missing = required.filter((key) => isEmptyAltaValue(alta[key]));
+  if (alta.requiereFactura && !hasDocument) {
+    missing.push('documento');
+  }
+  return missing;
 }
 
 export function isValidAltaEmail(value) {
@@ -292,16 +306,17 @@ export function getAltaInvalidKeys(alta) {
   const invalid = [];
   if (!isEmptyAltaValue(alta.email) && !isValidAltaEmail(alta.email)) invalid.push('email');
   if (!isEmptyAltaValue(alta.tel) && !isValidAltaPhone(alta.tel)) invalid.push('tel');
+  if (!isEmptyAltaValue(alta.rfc) && validateRfc(alta.rfc).state !== 'valid') invalid.push('rfc');
   return invalid;
 }
 
-export function isAltaComplete(alta) {
+export function isAltaComplete(alta, { hasDocument = true } = {}) {
   if (alta == null) return false;
-  return getAltaMissingKeys(alta).length === 0 && getAltaInvalidKeys(alta).length === 0;
+  return getAltaMissingKeys(alta, { hasDocument }).length === 0 && getAltaInvalidKeys(alta).length === 0;
 }
 
-export function getAltaSaveHint(alta) {
-  const missing = getAltaMissingKeys(alta);
+export function getAltaSaveHint(alta, { hasDocument = true } = {}) {
+  const missing = getAltaMissingKeys(alta, { hasDocument });
   if (missing.length === 0) {
     const invalid = getAltaInvalidKeys(alta);
     return invalid.length ? `Revisa: ${invalid.map((key) => ALTA_LABELS[key]).join(', ')}.` : '';
