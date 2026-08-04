@@ -379,9 +379,19 @@ describe('PR D — Alta fiscal-data UI source scan', () => {
       /function saveAlta\(.*?\)\s*\{[\s\S]*?setAlta\(emptyAlta\(\)\);\s*setAltaDocumentFile\(null\);/,
       'expected saveAlta success path to clear alta and altaDocumentFile together'
     );
+    // There are two "Limpiar" buttons (capture tab and alta tab). Pick the alta
+    // one by the reset it performs, and assert on the handler body rather than
+    // its exact closing braces, so adding another reset call does not break this.
+    const limpiarOffsets = [...appSource.matchAll(/Limpiar/g)].map((match) => match.index);
+    const altaLimpiar = limpiarOffsets.find((offset) =>
+      appSource.slice(Math.max(0, offset - 400), offset).includes('setAltaDocumentFile(null);')
+    );
+    assert.ok(altaLimpiar !== undefined, 'expected to find the alta Limpiar handler');
+    const limpiarHandler = appSource.slice(Math.max(0, altaLimpiar - 400), altaLimpiar);
+    assert.match(limpiarHandler, /setAlta\(emptyAlta\(\)\);/, 'expected Limpiar handler to reset alta');
     assert.match(
-      appSource,
-      /onClick=\{\(\) => \{\s*setAlta\(emptyAlta\(\)\);\s*setAltaDocumentFile\(null\);\s*\}\}[\s\S]*?Limpiar/,
+      limpiarHandler,
+      /setAltaDocumentFile\(null\);/,
       'expected Limpiar handler to clear altaDocumentFile'
     );
   });
