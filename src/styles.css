@@ -802,6 +802,90 @@ a {
   color: #fff;
 }
 
+.assignment-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.toggle-switch {
+  position: relative;
+  flex-shrink: 0;
+  width: 44px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid rgba(17, 24, 39, 0.12);
+  border-radius: 999px;
+  background: rgba(107, 114, 128, 0.32);
+  cursor: pointer;
+  transition: background 140ms ease, border-color 140ms ease;
+}
+
+.toggle-switch.is-on {
+  background: var(--brand);
+  border-color: var(--brand);
+}
+
+.toggle-switch-thumb {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.35);
+  transition: transform 140ms ease;
+}
+
+.toggle-switch.is-on .toggle-switch-thumb {
+  transform: translateX(20px);
+}
+
+.toggle-switch:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.toggle-switch:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+.assignment-toggle-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.assignment-toggle-label {
+  font-weight: 700;
+  font-size: 0.88rem;
+  color: var(--text);
+}
+
+.assignment-toggle-status {
+  font-size: 0.74rem;
+  color: var(--muted);
+}
+
+.generic-field-tag {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px dashed rgba(17, 24, 39, 0.14);
+  border-radius: 10px;
+  background: rgba(17, 24, 39, 0.02);
+}
+
+.generic-field-value {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
 .section-grid {
   display: grid;
   gap: 12px;

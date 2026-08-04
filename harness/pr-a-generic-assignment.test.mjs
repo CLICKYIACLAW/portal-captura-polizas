@@ -142,7 +142,40 @@ describe('PR A — generic capture assignment', () => {
           genericVendor: null,
           assignmentMode: 'manual'
         }),
-        { disabled: true, label: 'Cargando vendedores...' }
+        { disabled: true, checked: false, statusLabel: 'Cargando vendedores...' }
+      );
+    });
+
+    it('flags the toggle unavailable when the catalog has no VG001 vendor', () => {
+      assert.deepEqual(
+        getGenericAssignmentToggleState({
+          vendedoresLoading: false,
+          genericVendor: null,
+          assignmentMode: 'manual'
+        }),
+        { disabled: true, checked: false, statusLabel: 'No disponible: el catálogo no contiene VG001' }
+      );
+    });
+
+    it('enables the switch unchecked in manual mode once VG001 is available', () => {
+      assert.deepEqual(
+        getGenericAssignmentToggleState({
+          vendedoresLoading: false,
+          genericVendor: { Clave: 'VG001' },
+          assignmentMode: 'manual'
+        }),
+        { disabled: false, checked: false, statusLabel: '' }
+      );
+    });
+
+    it('enables the switch checked in generic mode once VG001 is available', () => {
+      assert.deepEqual(
+        getGenericAssignmentToggleState({
+          vendedoresLoading: false,
+          genericVendor: { Clave: 'VG001' },
+          assignmentMode: 'generic'
+        }),
+        { disabled: false, checked: true, statusLabel: '' }
       );
     });
   });
