@@ -4,9 +4,13 @@ import { readFile } from 'node:fs/promises';
 import {
   ALTA_DOCUMENT_TYPES,
   CONSTANCIA_DOCUMENT_ID,
+  applyConstanciaReadResult,
   applyDetectedDocumentType,
   findAltaDocumentType,
+  getConstanciaClaimStatus,
   hasConstanciaDocument,
+  isConstanciaVerified,
+  markConstanciaReadAttempted,
   resolveDetectedDocumentType
 } from '../src/lib/altaDocumentTypes.js';
 import { buildAltaAnthropicPrompt, getAltaMissingKeys, getAltaSaveHint } from '../src/lib/utils.js';
@@ -150,27 +154,52 @@ describe('PR E — alta document type catalog', () => {
   });
 });
 
-describe('PR E — hasConstanciaDocument helper', () => {
-  it('returns true when the general document is a constancia and there is no second file', () => {
-    assert.equal(hasConstanciaDocument({ docType: CONSTANCIA_DOCUMENT_ID }, null), true);
+describe('PR E - verified constancia helpers', () => {
+  describe('isConstanciaVerified', () => {
+    it('requires AI confirmation or an explicit override, never a manual label alone', () => {
+      assert.equal(isConstanciaVerified({ aiDetectedType: CONSTANCIA_DOCUMENT_ID }), true);
+      assert.equal(isConstanciaVerified({ aiDetectedType: 'ine', overrideConfirmed: true }), true);
+      assert.equal(isConstanciaVerified({ overrideConfirmed: true }), true);
+      assert.equal(isConstanciaVerified({ aiDetectedType: 'ine' }), false);
+      assert.equal(isConstanciaVerified({ aiDetectedType: null }), false);
+      assert.equal(isConstanciaVerified({ docType: CONSTANCIA_DOCUMENT_ID }), false);
+    });
+
+    it('tolerates null, undefined, and non-object input', () => {
+      assert.equal(isConstanciaVerified(null), false);
+      assert.equal(isConstanciaVerified(undefined), false);
+      assert.equal(isConstanciaVerified('constancia'), false);
+    });
   });
 
-  it('returns true when the general document is an INE but the constancia slot has a file', () => {
-    assert.equal(hasConstanciaDocument({ docType: 'ine' }, { cat: 'alta-constancia' }), true);
+  describe('hasConstanciaDocument', () => {
+    it('accepts an AI-verified general entry', () => {
+      assert.equal(hasConstanciaDocument({ aiDetectedType: CONSTANCIA_DOCUMENT_ID }, null), true);
+    });
+
+    it('accepts an explicitly overridden dedicated entry', () => {
+      assert.equal(hasConstanciaDocument(null, { overrideConfirmed: true }), true);
+    });
+
+    it('rejects present but unverified entries and missing entries', () => {
+      assert.equal(hasConstanciaDocument({ docType: CONSTANCIA_DOCUMENT_ID }, { aiDetectedType: 'ine' }), false);
+      assert.equal(hasConstanciaDocument(null, null), false);
+      assert.equal(hasConstanciaDocument(undefined, undefined), false);
+    });
   });
 
-  it('returns false when the general document is an INE and the constancia slot is empty', () => {
-    assert.equal(hasConstanciaDocument({ docType: 'ine' }, null), false);
-  });
+  describe('getConstanciaClaimStatus', () => {
+    it('describes verified, conflicting, unverified, and absent general claims', () => {
+      assert.equal(getConstanciaClaimStatus({ aiDetectedType: CONSTANCIA_DOCUMENT_ID }), 'verified');
+      assert.equal(getConstanciaClaimStatus({ docType: CONSTANCIA_DOCUMENT_ID, aiDetectedType: 'ine' }), 'conflict');
+      assert.equal(getConstanciaClaimStatus({ docType: CONSTANCIA_DOCUMENT_ID, aiDetectedType: null }), 'unverified');
+      assert.equal(getConstanciaClaimStatus({ docType: 'ine', aiDetectedType: 'ine' }), 'none');
+    });
 
-  it('returns false without throwing when both arguments are null or undefined', () => {
-    assert.equal(hasConstanciaDocument(null, null), false);
-    assert.equal(hasConstanciaDocument(undefined, undefined), false);
-    assert.equal(hasConstanciaDocument(null, undefined), false);
-  });
-
-  it('returns false when a file exists but its docType is empty and there is no constancia slot file', () => {
-    assert.equal(hasConstanciaDocument({ docType: '' }, null), false);
+    it('tolerates null and undefined input', () => {
+      assert.equal(getConstanciaClaimStatus(null), 'none');
+      assert.equal(getConstanciaClaimStatus(undefined), 'none');
+    });
   });
 });
 
@@ -178,7 +207,7 @@ describe('PR E — App.jsx gates through hasConstanciaDocument', () => {
   it('uses the helper with both files for the save/complete/hint gates', async () => {
     const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
     assert.match(appSource, /import\s+\{[^}]*hasConstanciaDocument[^}]*\}\s+from\s+['"]\.\/lib\/altaDocumentTypes['"]/);
-    assert.match(appSource, /hasConstancia:\s*hasConstanciaDocument\(altaDocumentFile,\s*altaConstanciaFile\)/);
+    assert.match(appSource, /hasConstancia:\s*hasVerifiedConstancia/);
     assert.doesNotMatch(appSource, /hasConstancia:\s*altaDocumentFile\?\.docType\s*===\s*CONSTANCIA_DOCUMENT_ID/);
     assert.doesNotMatch(appSource, /hasConstancia:\s*Boolean\(altaDocumentFile\)/);
     assert.doesNotMatch(appSource, /hasDocument:\s*Boolean\(altaDocumentFile\)/);
@@ -210,8 +239,18 @@ describe('PR E — App.jsx gates through hasConstanciaDocument', () => {
     // user-choice guard must read the freshest state from the updater argument.
     assert.match(
       appSource,
-      /setAltaDocumentFile\(\(current\) => applyDetectedDocumentType\(current, detectedType\)\)/,
-      'expected readAltaDocument to funnel the detection through applyDetectedDocumentType inside the updater'
+      /setAltaDocumentFile\(\(current\) => \{[\s\S]*?current\.file !== file[\s\S]*?applyConstanciaReadResult\([\s\S]*?applyDetectedDocumentType\(current, detectedType\)[\s\S]*?\}\)/,
+      'expected readAltaDocument to funnel the detection through applyConstanciaReadResult inside the updater, guarded by file identity'
+    );
+    assert.match(
+      appSource,
+      /setAltaConstanciaFile\(\(current\) => applyConstanciaReadResult\(current, file, detectedType\)\)/,
+      'expected the dedicated constancia read to record its verdict through the same identity-guarded helper'
+    );
+    assert.doesNotMatch(
+      appSource,
+      /aiDetectedType:\s*detectedType/,
+      'expected the verdict to be recorded only by the identity-guarded helper, never assigned inline'
     );
     assert.doesNotMatch(
       appSource,
@@ -235,6 +274,21 @@ describe('PR E — general document dropzone copy', () => {
       appSource,
       /alta\.requiereFactura\s*\?\s*['"]Constancia de situación fiscal['"]\s*:\s*['"]Documento del asegurado['"]/
     );
+  });
+});
+
+describe('PR E - constancia verification UI source contracts', () => {
+  it('gates each override checkbox behind an attempted AI read', async () => {
+    const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
+    assert.match(appSource, /altaDocumentFile\?\.docType\s*===\s*CONSTANCIA_DOCUMENT_ID\s*&&\s*altaDocumentFile\.aiReadAttempted\s*&&\s*!isConstanciaVerified/);
+    assert.match(appSource, /altaConstanciaFile\s*&&\s*altaConstanciaFile\.aiReadAttempted\s*&&\s*!isConstanciaVerified/);
+  });
+
+  it('provides a dedicated classification action and resets verification state on new files', async () => {
+    const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
+    assert.match(appSource, /async function readAltaConstancia\(\)/);
+    assert.match(appSource, /onClick=\{readAltaConstancia\}/);
+    assert.match(appSource, /cat:\s*['"]alta-constancia['"],[\s\S]*?aiDetectedType:\s*null,[\s\S]*?aiReadAttempted:\s*false,[\s\S]*?overrideConfirmed:\s*false/);
   });
 });
 
@@ -310,25 +364,95 @@ describe('PR E — applyDetectedDocumentType (stale-choice guard)', () => {
 });
 
 describe('PR E — a separately uploaded constancia stays removable', () => {
-  it('renders the uploaded constancia row outside the already-satisfied branch', async () => {
+  it('renders the uploaded constancia row and Quitar button regardless of verification state', async () => {
     const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
-    const blockStart = appSource.indexOf('{alta.requiereFactura ? (');
-    assert.ok(blockStart !== -1, 'expected to find the fiscal constancia block');
-    const block = appSource.slice(blockStart, blockStart + 3000);
+    const fiscalStart = appSource.indexOf('{alta.requiereFactura ? (');
+    const rowStart = appSource.indexOf('{altaConstanciaFile ? (', fiscalStart);
+    assert.ok(rowStart > fiscalStart, 'expected the uploaded-constancia row in the fiscal block');
+    assert.ok(appSource.indexOf('setAltaConstanciaFile(null)', rowStart) > rowStart);
+  });
+});
 
-    const pillOffset = block.indexOf('ya cargada arriba');
-    const removeOffset = block.indexOf('setAltaConstanciaFile(null)');
-    assert.ok(pillOffset !== -1, 'expected the already-uploaded confirmation pill');
-    assert.ok(removeOffset !== -1, 'expected a control that clears altaConstanciaFile');
+describe('PR F — an AI verdict never lands on a file it did not read', () => {
+  const fileA = { name: 'a.pdf' };
+  const fileB = { name: 'b.pdf' };
 
-    // The remove control must NOT be nested in the else branch of the pill, or a
-    // file uploaded here becomes invisible and unremovable the moment the general
-    // document is typed as a constancia.
-    const elseBranchStart = block.indexOf(') : (', pillOffset);
-    const elseBranchEnd = block.indexOf('\n                )}', elseBranchStart);
-    assert.ok(
-      removeOffset < elseBranchStart || removeOffset > elseBranchEnd,
-      'expected the uploaded-constancia row and its Quitar button to render regardless of the general document type'
+  it('applies the verdict while the entry still holds the file that was read', () => {
+    const current = { file: fileA, aiDetectedType: null, aiReadAttempted: false, overrideConfirmed: false };
+    const next = applyConstanciaReadResult(current, fileA, 'constancia');
+    assert.equal(next.aiDetectedType, 'constancia');
+    assert.equal(next.aiReadAttempted, true);
+  });
+
+  it('discards the verdict when the file was swapped mid-read', () => {
+    const current = { file: fileB, aiDetectedType: null, aiReadAttempted: false, overrideConfirmed: false };
+    const next = applyConstanciaReadResult(current, fileA, 'constancia');
+    assert.strictEqual(next, current);
+    assert.equal(next.aiDetectedType, null);
+    assert.equal(next.aiReadAttempted, false);
+    assert.equal(isConstanciaVerified(next), false);
+  });
+
+  it('records a null verdict as attempted so the override unlocks', () => {
+    const current = { file: fileA, aiDetectedType: null, aiReadAttempted: false };
+    const next = applyConstanciaReadResult(current, fileA, null);
+    assert.equal(next.aiDetectedType, null);
+    assert.equal(next.aiReadAttempted, true);
+    assert.equal(isConstanciaVerified(next), false);
+  });
+
+  it('merges an extra patch without losing the verdict fields', () => {
+    const current = { file: fileA, docType: '', docTypeSource: '' };
+    const next = applyConstanciaReadResult(current, fileA, 'ine', { docType: 'ine', docTypeSource: 'ai' });
+    assert.equal(next.docType, 'ine');
+    assert.equal(next.docTypeSource, 'ai');
+    assert.equal(next.aiDetectedType, 'ine');
+    assert.equal(next.aiReadAttempted, true);
+  });
+
+  it('is a no-op on missing entries or a missing read file', () => {
+    assert.equal(applyConstanciaReadResult(null, fileA, 'constancia'), null);
+    assert.equal(applyConstanciaReadResult(undefined, fileA, 'constancia'), undefined);
+    const current = { file: fileA };
+    assert.strictEqual(applyConstanciaReadResult(current, null, 'constancia'), current);
+  });
+
+  it('markConstanciaReadAttempted only marks the entry holding the read file', () => {
+    const same = { file: fileA, aiReadAttempted: false };
+    assert.equal(markConstanciaReadAttempted(same, fileA).aiReadAttempted, true);
+
+    const swapped = { file: fileB, aiReadAttempted: false };
+    assert.strictEqual(markConstanciaReadAttempted(swapped, fileA), swapped);
+    assert.equal(swapped.aiReadAttempted, false);
+
+    assert.equal(markConstanciaReadAttempted(null, fileA), null);
+  });
+});
+
+describe('PR F — a read that never reaches the AI must not unlock the override', () => {
+  it('bails out before recording an attempt when no API key is available', async () => {
+    const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
+
+    // Both reads must return early on a missing key. Recording an attempt there
+    // would let a user dismiss the key prompt and then self-certify a document
+    // the AI never analysed, which is exactly the bypass this flow prevents.
+    assert.match(
+      appSource,
+      /function ensureAnthropicKeyForVerification\(\)/,
+      'expected a guard that refuses the read when no API key is configured'
     );
+
+    for (const fn of ['readAltaDocument', 'readAltaConstancia']) {
+      const start = appSource.indexOf(`async function ${fn}(`);
+      assert.ok(start !== -1, `expected to find ${fn}`);
+      const body = appSource.slice(start, start + 900);
+      const guardOffset = body.indexOf('ensureAnthropicKeyForVerification()');
+      const attemptOffset = body.indexOf('markConstanciaReadAttempted');
+      assert.ok(guardOffset !== -1, `expected ${fn} to check the API key before reading`);
+      assert.ok(
+        attemptOffset === -1 || guardOffset < attemptOffset,
+        `expected ${fn} to bail out on a missing key before any attempt is recorded`
+      );
+    }
   });
 });
