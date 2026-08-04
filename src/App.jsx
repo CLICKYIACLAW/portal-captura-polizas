@@ -7,6 +7,7 @@ import {
   createLog,
   createPoliza,
   downloadAttachmentUrl,
+  findVendorByClave,
   loadAsegurados,
   loadGrupos,
   loadRamos,
@@ -32,6 +33,7 @@ import {
   applyAssignmentSelection,
   applyCaptureFieldUpdate,
   buildAltaAnthropicPrompt,
+  hasAssignmentTupleChanged,
   buildAltaFieldNotes,
   countFilled,
   fileToBase64,
@@ -81,13 +83,14 @@ const LOCAL_BOOT = {
   records: legacyBootstrap.records || EMPTY_BOOT.records
 };
 
-function emptyCapture(length = POLIZA_LAYOUT_FIELDS.length) {
+export function emptyCapture(length = POLIZA_LAYOUT_FIELDS.length) {
   return {
     linea: '',
     gerencia: '',
     vendedor: '',
     vendedorId: '',
     asegurado: '',
+    assignmentMode: 'manual',
     ramo: '',
     subramo: '',
     aseguradora: '',
@@ -126,6 +129,96 @@ function emptyAlta() {
     estadoDerivado: false,
     giro: '',
     regimen: ''
+  };
+}
+
+export function activateGenericAssignment(current, vendors) {
+  const generic = findVendorByClave(vendors);
+  if (!generic) return current;
+
+  const patch = {
+    vendedor: generic.Valor ?? '',
+    vendedorId: String(generic.IdVendedor ?? ''),
+    asegurado: generic.Valor ?? ''
+  };
+
+  if (hasAssignmentTupleChanged(current, { ...current, ...patch })) {
+    return applyAssignmentSelection(
+      current,
+      'assignmentMode',
+      'generic',
+      patch,
+      POLIZA_LAYOUT_FIELDS.length
+    );
+  }
+
+  return { ...current, assignmentMode: 'generic' };
+}
+
+export function returnToManualAssignment(current) {
+  const patch = {
+    vendedor: '',
+    vendedorId: '',
+    asegurado: ''
+  };
+
+  if (hasAssignmentTupleChanged(current, { ...current, ...patch })) {
+    return applyAssignmentSelection(
+      current,
+      'assignmentMode',
+      'manual',
+      patch,
+      POLIZA_LAYOUT_FIELDS.length
+    );
+  }
+
+  return { ...current, assignmentMode: 'manual' };
+}
+
+
+export function selectCaptureLine(current, value, layoutLength) {
+  const dependentPatch = {
+    gerencia: '',
+    ramo: '',
+    subramo: ''
+  };
+
+  if (current.assignmentMode !== 'generic') {
+    Object.assign(dependentPatch, {
+      vendedor: '',
+      vendedorId: '',
+      asegurado: ''
+    });
+  }
+
+  return applyAssignmentSelection(current, 'linea', value, dependentPatch, layoutLength);
+}
+
+export function selectCaptureGerencia(current, value, layoutLength) {
+  const dependentPatch = current.assignmentMode === 'generic'
+    ? {}
+    : { vendedor: '', vendedorId: '', asegurado: '' };
+
+  return applyAssignmentSelection(current, 'gerencia', value, dependentPatch, layoutLength);
+}
+
+export function getGenericAssignmentToggleState({ vendedoresLoading, genericVendor, assignmentMode }) {
+  if (vendedoresLoading) {
+    return { disabled: true, label: 'Cargando vendedores...' };
+  }
+
+  if (!genericVendor) {
+    return {
+      disabled: true,
+      label: 'No disponible: el catálogo no contiene VG001'
+    };
+  }
+
+  return {
+    disabled: false,
+    label: assignmentMode === 'generic'
+      ? 'Elegir vendedor manualmente'
+      : 'Usar vendedor genérico'
   };
 }
 
@@ -789,6 +882,12 @@ function App() {
     [aseguradoCatalog]
   );
   const selectedVendorId = String(capture.vendedorId || '').trim();
+  const genericVendor = findVendorByClave(vendorOptions);
+  const genericAssignmentToggleState = getGenericAssignmentToggleState({
+    vendedoresLoading,
+    genericVendor,
+    assignmentMode: capture.assignmentMode
+  });
   const selectedRamoOption =
     normalizedRamoOptions.find((option) => option.value === String(capture.ramo || '')) || null;
   const selectedSubramoOption =
@@ -980,6 +1079,11 @@ function App() {
   }, [capture.ramo, selectedRamoLabel]);
 
   useEffect(() => {
+    if (capture.assignmentMode === 'generic') {
+      setAseguradosLoading(false);
+      return undefined;
+    }
+
     if (!selectedVendorId) {
       setAseguradoCatalog([]);
       setAseguradosLoading(false);
@@ -1017,7 +1121,7 @@ function App() {
     return () => {
       mounted = false;
     };
-  }, [selectedVendorId]);
+  }, [selectedVendorId, capture.assignmentMode]);
 
   useEffect(() => {
     const vendorId = String(alta.vendedor ? (vendedorCatalog.find((vendor) => {
@@ -1155,6 +1259,14 @@ function App() {
 
   function updateCapture(field, value) {
     setCapture((current) => applyCaptureFieldUpdate(current, field, value));
+  }
+
+  function handleToggleAssignmentMode() {
+    if (capture.assignmentMode === 'generic') {
+      setCapture((current) => returnToManualAssignment(current));
+    } else {
+      setCapture((current) => activateGenericAssignment(current, vendorOptions));
+    }
   }
 
   function updateLayout(index, value) {
@@ -1616,6 +1728,16 @@ function App() {
             subtitle="Selecciona vendedor, asegurado y ramo para continuar"
             headAlign="left"
           >
+            <div className="read-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={genericAssignmentToggleState.disabled}
+                onClick={handleToggleAssignmentMode}
+              >
+                {genericAssignmentToggleState.label}
+              </button>
+            </div>
             <div className="combo-grid">
               {showCaptureContextCombos ? (
                 <ComboField
@@ -1626,20 +1748,7 @@ function App() {
                   hint={`${lineOptions.length} opciones`}
                   onSelect={(value) =>
                     setCapture((current) =>
-                      applyAssignmentSelection(
-                        current,
-                        'linea',
-                        value,
-                        {
-                          gerencia: '',
-                          vendedor: '',
-                          asegurado: '',
-                          ramo: '',
-                          subramo: '',
-                          vendedorId: ''
-                        },
-                        POLIZA_LAYOUT_FIELDS.length
-                      )
+                      selectCaptureLine(current, value, POLIZA_LAYOUT_FIELDS.length)
                     )
                   }
                 />
@@ -1654,78 +1763,72 @@ function App() {
                   disabled={!capture.linea}
                   onSelect={(value) =>
                     setCapture((current) =>
-                      applyAssignmentSelection(
-                        current,
-                        'gerencia',
-                        value,
-                        {
-                          vendedor: '',
-                          vendedorId: '',
-                          asegurado: ''
-                        },
-                        POLIZA_LAYOUT_FIELDS.length
-                      )
+                      selectCaptureGerencia(current, value, POLIZA_LAYOUT_FIELDS.length)
                     )
                   }
                 />
               ) : null}
-              <ComboField
-                label="Vendedor"
-                value={capture.vendedor}
-                options={vendorOptions}
-                placeholder={vendedoresLoading ? 'Cargando vendedores...' : 'Selecciona el vendedor'}
-                hint={vendedoresLoading ? 'Cargando vendedores...' : vendorOptions.length ? `${vendorOptions.length} opciones` : 'Sin vendedores'}
-                disabled={vendedoresLoading || !vendorOptions.length}
-                onSelect={(value) => {
-                  const selectedVendor = vendorOptions.find(
-                    (option) => normalizeText(option.Valor ?? option.Texto ?? '') === normalizeText(value)
-                  );
+              {capture.assignmentMode !== 'generic' && (
+                <ComboField
+                  label="Vendedor"
+                  value={capture.vendedor}
+                  options={vendorOptions}
+                  placeholder={vendedoresLoading ? 'Cargando vendedores...' : 'Selecciona el vendedor'}
+                  hint={vendedoresLoading ? 'Cargando vendedores...' : vendorOptions.length ? `${vendorOptions.length} opciones` : 'Sin vendedores'}
+                  disabled={vendedoresLoading || !vendorOptions.length}
+                  onSelect={(value) => {
+                    const selectedVendor = vendorOptions.find(
+                      (option) => normalizeText(option.Valor ?? option.Texto ?? '') === normalizeText(value)
+                    );
 
-                  setCapture((current) =>
-                    applyAssignmentSelection(
-                      current,
-                      'vendedor',
-                      value,
-                      {
-                        vendedorId: selectedVendor?.IdVendedor ? String(selectedVendor.IdVendedor) : '',
-                        asegurado: ''
-                      },
-                      POLIZA_LAYOUT_FIELDS.length
+                    setCapture((current) =>
+                      applyAssignmentSelection(
+                        current,
+                        'vendedor',
+                        value,
+                        {
+                          vendedorId: selectedVendor?.IdVendedor ? String(selectedVendor.IdVendedor) : '',
+                          asegurado: ''
+                        },
+                        POLIZA_LAYOUT_FIELDS.length
+                      )
+                    );
+                  }}
+                />
+              )}
+              {capture.assignmentMode !== 'generic' && (
+                <ComboField
+                  label="Asegurado"
+                  value={capture.asegurado}
+                  options={aseguradoCatalog}
+                  placeholder={
+                    aseguradosLoading
+                      ? 'Cargando asegurados...'
+                      : selectedVendorId
+                        ? 'Selecciona el asegurado'
+                        : 'Selecciona un vendedor primero'
+                  }
+                  hint={
+                    aseguradosLoading
+                      ? 'Cargando asegurados...'
+                      : selectedVendorId
+                        ? aseguradoCatalog.length
+                          ? `${aseguradoCatalog.length} opciones`
+                          : 'Sin asegurados'
+                        : 'Depende del vendedor'
+                  }
+                  disabled={aseguradosLoading || !selectedVendorId || !aseguradoCatalog.length}
+                  onSelect={(value) =>
+                    setCapture((current) =>
+                      applyAssignmentSelection(current, 'asegurado', value, {}, POLIZA_LAYOUT_FIELDS.length)
                     )
-                  );
-                }}
-              />
-              <ComboField
-                label="Asegurado"
-                value={capture.asegurado}
-                options={aseguradoCatalog}
-                placeholder={
-                  aseguradosLoading
-                    ? 'Cargando asegurados...'
-                    : selectedVendorId
-                      ? 'Selecciona el asegurado'
-                      : 'Selecciona un vendedor primero'
-                }
-                hint={
-                  aseguradosLoading
-                    ? 'Cargando asegurados...'
-                    : selectedVendorId
-                      ? aseguradoCatalog.length
-                        ? `${aseguradoCatalog.length} opciones`
-                        : 'Sin asegurados'
-                      : 'Depende del vendedor'
-                }
-                disabled={aseguradosLoading || !selectedVendorId || !aseguradoCatalog.length}
-                onSelect={(value) =>
-                  setCapture((current) =>
-                    applyAssignmentSelection(current, 'asegurado', value, {}, POLIZA_LAYOUT_FIELDS.length)
-                  )
-                }
-                actionLabel={(query) =>
-                  query ? `Dar de alta a «${query}»` : 'Dar de alta a un asegurado nuevo'
-                }
-                onAction={(query) => openAltaFromCapture(query)}
-              />
+                  }
+                  actionLabel={(query) =>
+                    query ? `Dar de alta a «${query}»` : 'Dar de alta a un asegurado nuevo'
+                  }
+                  onAction={(query) => openAltaFromCapture(query)}
+                />
+              )}
               <ComboField
                 label="Ramo"
                 value={capture.ramo}

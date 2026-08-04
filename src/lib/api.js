@@ -67,6 +67,26 @@ function normalizeType(value) {
     .toLowerCase();
 }
 
+export const GENERIC_VENDOR_CLAVE = 'VG001';
+
+export function mapBiVendorOption(item) {
+  const clave = String(item?.Clave ?? '').trim();
+  const nombre = String(item?.Nombre ?? '').trim();
+  const label = [clave, nombre].filter(Boolean).join(' - ');
+  if (!label) return null;
+  return {
+    Texto: label,
+    Valor: label,
+    Clave: clave,
+    IdVendedor: item?.IdVendedor ?? 0
+  };
+}
+
+export function findVendorByClave(vendors, clave = GENERIC_VENDOR_CLAVE) {
+  const target = String(clave ?? GENERIC_VENDOR_CLAVE).trim();
+  return (vendors || []).find((vendor) => String(vendor?.Clave ?? '').trim() === target) || null;
+}
+
 function buildVendedoresBody(executive) {
   const tipo = normalizeType(executive?.Tipo);
   const body = {
@@ -151,16 +171,7 @@ async function fetchBiVendors(executive) {
     return [];
   }
 
-  return payload.Coincidencias.map((item) => {
-    const clave = String(item?.Clave ?? '').trim();
-    const nombre = String(item?.Nombre ?? '').trim();
-    const label = [clave, nombre].filter(Boolean).join(' - ');
-    return {
-      Texto: label,
-      Valor: label,
-      IdVendedor: item?.IdVendedor ?? 0
-    };
-  }).filter((item) => item.Texto);
+  return payload.Coincidencias.map(mapBiVendorOption).filter(Boolean);
 }
 
 export async function loadRamos() {
