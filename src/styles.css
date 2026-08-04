@@ -1130,6 +1130,43 @@ a {
   margin-top: 18px;
 }
 
+.group-modal-form {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.group-modal-form label,
+.group-suggestion-list strong {
+  font-weight: 700;
+}
+
+.group-suggestion-list {
+  display: grid;
+  gap: 8px;
+}
+
+.group-suggestion-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--bg-soft);
+  color: var(--text);
+  cursor: pointer;
+  text-align: left;
+}
+
+.group-suggestion-row:hover,
+.group-suggestion-row:focus-visible {
+  border-color: var(--brand);
+  background: var(--panel-strong);
+}
+
 .loading {
   min-height: 100vh;
   display: grid;
