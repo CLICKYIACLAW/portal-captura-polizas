@@ -259,7 +259,7 @@ const ALTA_LABELS = {
   regimen: 'régimen fiscal',
   regimenClave: 'régimen fiscal',
   usoCfdi: 'uso de CFDI',
-  documento: 'documento del asegurado'
+  documento: 'constancia de situación fiscal'
 };
 
 function isEmptyAltaValue(value) {
@@ -275,11 +275,11 @@ export function getAltaRequiredKeys(alta) {
   return [...ALTA_REQUIRED_SHARED, ...nameFields, ...fiscalFields];
 }
 
-export function getAltaMissingKeys(alta, { hasDocument = true } = {}) {
+export function getAltaMissingKeys(alta, { hasConstancia = true } = {}) {
   if (alta == null) return [];
   const required = getAltaRequiredKeys(alta);
   const missing = required.filter((key) => isEmptyAltaValue(alta[key]));
-  if (alta.requiereFactura && !hasDocument) {
+  if (alta.requiereFactura && !hasConstancia) {
     missing.push('documento');
   }
   return missing;
@@ -310,13 +310,13 @@ export function getAltaInvalidKeys(alta) {
   return invalid;
 }
 
-export function isAltaComplete(alta, { hasDocument = true } = {}) {
+export function isAltaComplete(alta, { hasConstancia = true } = {}) {
   if (alta == null) return false;
-  return getAltaMissingKeys(alta, { hasDocument }).length === 0 && getAltaInvalidKeys(alta).length === 0;
+  return getAltaMissingKeys(alta, { hasConstancia }).length === 0 && getAltaInvalidKeys(alta).length === 0;
 }
 
-export function getAltaSaveHint(alta, { hasDocument = true } = {}) {
-  const missing = getAltaMissingKeys(alta, { hasDocument });
+export function getAltaSaveHint(alta, { hasConstancia = true } = {}) {
+  const missing = getAltaMissingKeys(alta, { hasConstancia });
   if (missing.length === 0) {
     const invalid = getAltaInvalidKeys(alta);
     return invalid.length ? `Revisa: ${invalid.map((key) => ALTA_LABELS[key]).join(', ')}.` : '';
@@ -367,11 +367,15 @@ export function buildAltaAnthropicPrompt(tipo) {
     '{',
     '  "alta": {',
     keysList,
+    '  },',
+    '  "documento": {',
+    '    "tipo": "constancia" | "rfc" | "domicilio" | "ine" | null',
     '  }',
     '}',
     'Usa exactamente las claves técnicas indicadas como claves JSON; no inventes claves.',
     'Si el documento no muestra un campo, omítelo o usa null.',
     'Nunca devuelvas un arreglo posicional; usa siempre el objeto con claves.',
+    'Clasifica el documento en la clave "documento.tipo". Solo usa una de estas cuatro opciones: "constancia", "rfc", "domicilio" o "ine". Si no puedes identificar el documento con confianza, usa null; no adivines.',
     'Devuelve los datos listos para llenar el alta.'
   ].join('\n');
 }
