@@ -46,6 +46,7 @@ import {
   normalizeText,
   splitName
 } from './lib/utils';
+import { findGroupNameMatches } from './lib/groupCatalog';
 
 const TAB_IDS = ['captura', 'asegurados', 'polizas', 'bitacora'];
 const TAB_LABELS = {
@@ -678,7 +679,17 @@ async function callAnthropic(file, { prompt, errorLabel = 'leer el documento' })
   return extractJsonFromAnthropicText(text);
 }
 
-function Modal({ open, title, message, tone = 'danger', closeLabel = 'Cerrar', onClose }) {
+function Modal({
+  open,
+  title,
+  message = '',
+  tone = 'danger',
+  closeLabel = 'Cerrar',
+  onClose,
+  titleId = 'app-modal-title',
+  children = null,
+  actions = undefined
+}) {
   if (!open) return null;
 
   return (
@@ -687,7 +698,7 @@ function Modal({ open, title, message, tone = 'danger', closeLabel = 'Cerrar', o
         className={`modal-card tone-${tone}`}
         role={tone === 'danger' ? 'alertdialog' : 'dialog'}
         aria-modal="true"
-        aria-labelledby="app-modal-title"
+        aria-labelledby={titleId}
       >
         <div className="modal-head">
           <span className="eyebrow">{tone === 'danger' ? 'Error' : 'Aviso'}</span>
@@ -695,16 +706,85 @@ function Modal({ open, title, message, tone = 'danger', closeLabel = 'Cerrar', o
             ×
           </button>
         </div>
-        <h2 id="app-modal-title">{title}</h2>
-        <p>{message}</p>
-        <div className="modal-actions">
-          <button type="button" className="primary-button" onClick={onClose}>
-            {closeLabel}
-          </button>
-        </div>
+        <h2 id={titleId}>{title}</h2>
+        {message ? <p>{message}</p> : null}
+        {children}
+        {actions === undefined ? (
+          <div className="modal-actions">
+            <button type="button" className="primary-button" onClick={onClose}>
+              {closeLabel}
+            </button>
+          </div>
+        ) : (
+          <div className="modal-actions">{actions}</div>
+        )}
       </section>
     </div>
   );
+}
+
+export function useGroupModal({
+  alta,
+  setAlta,
+  groupCatalog,
+  setGroupCatalog,
+  createGrupo,
+  openErrorModal,
+  pushToast,
+  normalizeText
+}) {
+  const [groupModal, setGroupModal] = useState({ open: false, name: '', submitting: false });
+
+  function openGroupModal() {
+    setGroupModal({ open: true, name: '', submitting: false });
+  }
+
+  function closeGroupModal() {
+    setGroupModal({ open: false, name: '', submitting: false });
+  }
+
+  function selectGroupSuggestion(name) {
+    setAlta((current) => ({ ...current, grupo: name }));
+    closeGroupModal();
+  }
+
+  async function createGroupFromAlta() {
+    const grupo = normalizeText(groupModal.name);
+    if (!grupo) {
+      openErrorModal('Faltan datos', 'Escribe un nombre de grupo.');
+      return;
+    }
+    if (findGroupNameMatches(groupModal.name, groupCatalog).length > 0) {
+      return;
+    }
+
+    setGroupModal((current) => ({ ...current, submitting: true }));
+    try {
+      const result = await createGrupo({
+        nombre: grupo,
+        linea: alta.linea,
+        gerencia: alta.gerencia,
+        vendedor: alta.vendedor
+      });
+      const createdName = normalizeText(result?.record?.nombre);
+      setGroupCatalog((current) => [...current, createdName]);
+      setAlta((current) => ({ ...current, grupo: createdName }));
+      closeGroupModal();
+      pushToast(`Grupo ${createdName} listo`);
+    } catch (groupError) {
+      setGroupModal((current) => ({ ...current, submitting: false }));
+      openErrorModal('Error al guardar grupo', groupError.message || 'No se pudo guardar el grupo.');
+    }
+  }
+
+  return {
+    groupModal,
+    setGroupModal,
+    openGroupModal,
+    closeGroupModal,
+    selectGroupSuggestion,
+    createGroupFromAlta
+  };
 }
 
 function App() {
@@ -744,6 +824,24 @@ function App() {
   const [aseguradosLoading, setAseguradosLoading] = useState(false);
   const [groupsLoading, setGroupsLoading] = useState(false);
   const [readingDocument, setReadingDocument] = useState(false);
+
+  const {
+    groupModal,
+    setGroupModal,
+    openGroupModal,
+    closeGroupModal,
+    selectGroupSuggestion,
+    createGroupFromAlta
+  } = useGroupModal({
+    alta,
+    setAlta,
+    groupCatalog,
+    setGroupCatalog,
+    createGrupo,
+    openErrorModal,
+    pushToast,
+    normalizeText
+  });
 
   function openErrorModal(title, message) {
     setErrorModal({ title, message });
@@ -814,6 +912,11 @@ function App() {
     Boolean(normalizeText(capture.ramo));
   const showExtractionBlocks = Boolean(capture.extracted);
   const showCaptureContextCombos = true;
+  const groupMatches = useMemo(
+    () => findGroupNameMatches(groupModal.name, groupCatalog),
+    [groupModal.name, groupCatalog]
+  );
+  const canCreateGroup = Boolean(normalizeText(groupModal.name)) && groupMatches.length === 0;
 
   async function handleLogin(event) {
     event.preventDefault();
@@ -1450,21 +1553,6 @@ function App() {
       return;
     }
     pushToast('Asegurado dado de alta');
-    if (alta.grupo) {
-      try {
-        const result = await createGrupo({
-          nombre: alta.grupo,
-          linea: alta.linea,
-          gerencia: alta.gerencia,
-          vendedor: alta.vendedor
-        });
-        appendBootRecord('grupos', result?.record);
-      } catch (groupError) {
-        openErrorModal('Error al guardar grupo', groupError.message || 'No se pudo guardar el grupo.');
-        return;
-      }
-    }
-
     if (altaReturnToCapture) {
       setCapture((current) => ({
         ...current,
@@ -1477,29 +1565,66 @@ function App() {
     setAlta(emptyAlta());
   }
 
-  async function createGroupFromAlta(name) {
-    const grupo = normalizeText(name);
-    if (!grupo) {
-      openErrorModal('Faltan datos', 'Escribe un nombre de grupo.');
-      return;
-    }
-    try {
-      const result = await createGrupo({
-        nombre: grupo,
-        linea: alta.linea,
-        gerencia: alta.gerencia,
-        vendedor: alta.vendedor
-      });
-      appendBootRecord('grupos', result?.record);
-    } catch (groupError) {
-      openErrorModal('Error al guardar grupo', groupError.message || 'No se pudo guardar el grupo.');
-      return;
-    }
-    setAlta((current) => ({ ...current, grupo }));
-    pushToast(`Grupo ${grupo} listo`);
-  }
-
   const captureMatchClass = `status-chip ${matchResult.tone}`;
+  const groupModalNode = (
+    <Modal
+      open={groupModal.open}
+      title="Registrar grupo"
+      tone="neutral"
+      titleId="group-modal-title"
+      onClose={closeGroupModal}
+      actions={
+        <>
+          <button type="button" className="ghost-button" onClick={closeGroupModal} disabled={groupModal.submitting}>
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            form="group-modal-form"
+            className="primary-button"
+            disabled={!canCreateGroup || groupModal.submitting}
+          >
+            {groupModal.submitting ? 'Guardando...' : 'Registrar grupo'}
+          </button>
+        </>
+      }
+    >
+      <form
+        id="group-modal-form"
+        className="group-modal-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          createGroupFromAlta();
+        }}
+      >
+        <label htmlFor="group-modal-name">Nombre del grupo</label>
+        <input
+          id="group-modal-name"
+          type="text"
+          value={groupModal.name}
+          required
+          disabled={groupModal.submitting}
+          onChange={(event) => setGroupModal((current) => ({ ...current, name: event.target.value }))}
+        />
+        {groupMatches.length ? (
+          <div className="group-suggestion-list">
+            <strong>Tal vez buscas este grupo</strong>
+            {groupMatches.map(({ name }) => (
+              <button
+                key={name}
+                type="button"
+                className="group-suggestion-row"
+                onClick={() => selectGroupSuggestion(name)}
+              >
+                <span>{name}</span>
+                <span>Usar este grupo</span>
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </form>
+    </Modal>
+  );
   const errorModalNode = errorModal ? (
     <Modal
       open={Boolean(errorModal)}
@@ -1524,6 +1649,7 @@ function App() {
   if (!executive) {
     return (
       <>
+        {groupModalNode}
         {errorModalNode}
         <div className="login-screen">
           <div className="login-card">
@@ -1558,6 +1684,7 @@ function App() {
   if (loading) {
     return (
       <>
+        {groupModalNode}
         {errorModalNode}
         <div className="app-shell loading">
           <div className="hero-card">
@@ -1572,6 +1699,7 @@ function App() {
 
   return (
     <>
+      {groupModalNode}
       {errorModalNode}
       <div className={`app-shell ${captureLocked ? 'blocked' : ''}`}>
       <header className="topbar">
@@ -1991,13 +2119,22 @@ function App() {
                 label="Grupo *"
                 value={alta.grupo}
                 options={groupCatalog}
-                placeholder={groupsLoading ? 'Cargando grupos...' : 'Selecciona o escribe un grupo'}
+                placeholder={groupsLoading ? 'Cargando grupos...' : 'Selecciona un grupo'}
                 hint={groupsLoading ? 'Cargando grupos...' : groupCatalog.length ? `${groupCatalog.length} opciones` : 'Sin grupos'}
-                disabled={groupsLoading || (!groupCatalog.length && !alta.vendedor)}
+                disabled={groupsLoading || !groupCatalog.length}
                 onSelect={(value) => setAlta((current) => ({ ...current, grupo: value }))}
-                actionLabel={(query) => (query ? `Registrar grupo «${query}»` : 'Registrar nuevo grupo')}
-                onAction={createGroupFromAlta}
               />
+              <div className="mini-field group-registration">
+                <label>Nuevo grupo</label>
+                <button
+                  type="button"
+                  className="secondary-button"
+                  onClick={openGroupModal}
+                  disabled={!alta.vendedor || groupsLoading}
+                >
+                  Registrar grupo
+                </button>
+              </div>
             </div>
 
             <div className="mini-field">
