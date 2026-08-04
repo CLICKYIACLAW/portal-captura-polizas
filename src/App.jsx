@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useMemo, useState } from 'react';
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import appPackage from '../package.json';
 import {
   buscarEjecutivos,
@@ -734,12 +734,21 @@ export function useGroupModal({
   normalizeText
 }) {
   const [groupModal, setGroupModal] = useState({ open: false, name: '', submitting: false });
+  // Tracks the vendor the in-flight request was submitted for, so a late
+  // response cannot be misattributed after the user switches vendors.
+  const latestVendedorRef = useRef(alta.vendedor);
+  latestVendedorRef.current = alta.vendedor;
+  // Invalidated whenever the modal session is reopened/closed, so a stale
+  // response from a previous session can never touch the current one.
+  const submissionIdRef = useRef(0);
 
   function openGroupModal() {
+    submissionIdRef.current += 1;
     setGroupModal({ open: true, name: '', submitting: false });
   }
 
   function closeGroupModal() {
+    submissionIdRef.current += 1;
     setGroupModal({ open: false, name: '', submitting: false });
   }
 
@@ -758,6 +767,8 @@ export function useGroupModal({
       return;
     }
 
+    const submissionId = submissionIdRef.current;
+    const vendorAtSubmit = alta.vendedor;
     setGroupModal((current) => ({ ...current, submitting: true }));
     try {
       const result = await createGrupo({
@@ -767,12 +778,31 @@ export function useGroupModal({
         vendedor: alta.vendedor
       });
       const createdName = normalizeText(result?.record?.nombre);
+      const isStale =
+        submissionIdRef.current !== submissionId || latestVendedorRef.current !== vendorAtSubmit;
+
+      if (isStale) {
+        // The group was created server-side for vendorAtSubmit, but the UI
+        // has since moved to a different vendor/session — do not apply it
+        // to the wrong catalog or the wrong asegurado's grupo field.
+        pushToast(`Grupo ${createdName} creado, pero el vendedor cambió; revisa el catálogo.`);
+        if (submissionIdRef.current === submissionId) {
+          // Same modal session, just a different vendor: clear the stuck
+          // submitting flag. If the session itself moved on (submissionId
+          // changed), a newer submission owns groupModal now — leave it.
+          setGroupModal((current) => ({ ...current, submitting: false }));
+        }
+        return;
+      }
+
       setGroupCatalog((current) => [...current, createdName]);
       setAlta((current) => ({ ...current, grupo: createdName }));
       closeGroupModal();
       pushToast(`Grupo ${createdName} listo`);
     } catch (groupError) {
-      setGroupModal((current) => ({ ...current, submitting: false }));
+      if (submissionIdRef.current === submissionId) {
+        setGroupModal((current) => ({ ...current, submitting: false }));
+      }
       openErrorModal('Error al guardar grupo', groupError.message || 'No se pudo guardar el grupo.');
     }
   }

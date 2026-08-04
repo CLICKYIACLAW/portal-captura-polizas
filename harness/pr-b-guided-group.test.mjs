@@ -245,7 +245,7 @@ describe('useGroupModal', () => {
       pushToast: mocks.pushToast,
       normalizeText: utilsModule?.normalizeText
     });
-    captured = { ...result, alta, groupCatalog };
+    captured = { ...result, alta, groupCatalog, setAlta };
     return createElement('div', null, JSON.stringify({ groupModal: result.groupModal, alta }));
   }
 
@@ -356,5 +356,58 @@ describe('useGroupModal', () => {
     assert.equal(mocks.errorCalls.length, 1);
     assert.equal(mocks.errorCalls[0].title, 'Error al guardar grupo');
     assert.equal(mocks.errorCalls[0].message, 'SQL timeout');
+  });
+
+  it('discards a stale creation when the vendor changes while the request is in flight', async () => {
+    const container = global.document.createElement('div');
+    const r = createRoot(container);
+
+    let resolveCreate;
+    mocks.createGrupo = async (payload) => {
+      mocks.createGrupoCalls ||= [];
+      mocks.createGrupoCalls.push(payload);
+      return new Promise((resolve) => {
+        resolveCreate = () => resolve({ record: { nombre: payload.nombre } });
+      });
+    };
+
+    await act(() =>
+      r.render(
+        createElement(Harness, {
+          initialAlta: { linea: 'Autos', gerencia: 'Norte', vendedor: 'V1' },
+          initialCatalog: []
+        })
+      )
+    );
+    await act(() => captured.openGroupModal());
+    await act(() => captured.setGroupModal((current) => ({ ...current, name: 'Nuevo grupo' })));
+
+    let submitDone;
+    const submitPromise = new Promise((resolve) => {
+      submitDone = resolve;
+    });
+    act(() => {
+      captured.createGroupFromAlta().then(submitDone);
+    });
+
+    // The request is now in flight (submitting), still tied to vendor V1.
+    assert.equal(captured.groupModal.submitting, true);
+
+    // The user switches vendor before the backend responds.
+    await act(() => captured.setAlta((current) => ({ ...current, vendedor: 'V2', grupo: '' })));
+
+    // The backend now resolves the stale request for V1.
+    await act(() => resolveCreate());
+    await act(async () => {
+      await submitPromise;
+    });
+
+    // The stale result must NOT be attributed to the vendor now selected.
+    assert.equal(captured.alta.grupo, '');
+    assert.deepEqual(captured.groupCatalog, []);
+    assert.equal(captured.groupModal.submitting, false);
+    assert.ok(
+      mocks.toastCalls.some((message) => message.includes('Nuevo grupo') && message.toLowerCase().includes('vendedor'))
+    );
   });
 });
