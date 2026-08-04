@@ -63,6 +63,16 @@ export function applyAssignmentSelection(
   };
 }
 
+export function hasAssignmentTupleChanged(current, next) {
+  const keys = ['vendedor', 'vendedorId', 'asegurado'];
+  for (const key of keys) {
+    if (normalizeAssignmentValue(current?.[key]) !== normalizeAssignmentValue(next?.[key])) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function normalizeText(value) {
   return String(value ?? '').trim().replace(/\s+/g, ' ');
 }
