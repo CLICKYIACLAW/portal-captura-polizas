@@ -52,8 +52,12 @@ import { findGroupNameMatches } from './lib/groupCatalog';
 import {
   ALTA_DOCUMENT_TYPES,
   CONSTANCIA_DOCUMENT_ID,
+  applyConstanciaReadResult,
   applyDetectedDocumentType,
+  getConstanciaClaimStatus,
   hasConstanciaDocument,
+  isConstanciaVerified,
+  markConstanciaReadAttempted,
   resolveDetectedDocumentType
 } from './lib/altaDocumentTypes';
 import {
@@ -1008,14 +1012,16 @@ function App() {
   const [alta, setAlta] = useState(emptyAlta());
   const [altaDocumentFile, setAltaDocumentFile] = useState(null);
   const [altaConstanciaFile, setAltaConstanciaFile] = useState(null);
+  const hasVerifiedConstancia = hasConstanciaDocument(altaDocumentFile, altaConstanciaFile);
+  const generalConstanciaClaimStatus = getConstanciaClaimStatus(altaDocumentFile);
   const altaNotes = useMemo(() => buildAltaFieldNotes(alta), [alta]);
   const altaComplete = useMemo(
-    () => isAltaComplete(alta, { hasConstancia: hasConstanciaDocument(altaDocumentFile, altaConstanciaFile) }),
-    [alta, altaDocumentFile, altaConstanciaFile]
+    () => isAltaComplete(alta, { hasConstancia: hasVerifiedConstancia }),
+    [alta, hasVerifiedConstancia]
   );
   const altaHint = useMemo(
-    () => getAltaSaveHint(alta, { hasConstancia: hasConstanciaDocument(altaDocumentFile, altaConstanciaFile) }),
-    [alta, altaDocumentFile, altaConstanciaFile]
+    () => getAltaSaveHint(alta, { hasConstancia: hasVerifiedConstancia }),
+    [alta, hasVerifiedConstancia]
   );
   const altaUsoCfdiOptions = useMemo(
     () => getUsosCfdiParaRegimen(alta.regimenClave).map(formatUsoCfdiOption),
@@ -1663,11 +1669,32 @@ function App() {
     }
   }
 
+  /**
+   * Guards a document read that must not be recorded as an AI attempt unless a
+   * request actually reaches the AI.
+   *
+   * The manual override that lets a user self-certify the constancia unlocks on
+   * `aiReadAttempted`. `callAnthropic` throws before dispatching anything when no
+   * API key is configured, so routing that through the normal failure path would
+   * let a user simply dismiss the key prompt and then self-certify a document the
+   * AI never looked at — defeating the verification this flow exists to enforce.
+   * Bailing out here leaves the attempt unrecorded and the override locked.
+   */
+  function ensureAnthropicKeyForVerification() {
+    if (ensureAnthropicKey()) return true;
+    openErrorModal(
+      'Falta la clave de API',
+      'Se requiere la clave de API de Anthropic para verificar el documento. Sin ella no es posible confirmar la constancia.'
+    );
+    return false;
+  }
+
   async function readAltaDocument() {
     if (!altaDocumentFile) {
       openErrorModal('Falta un archivo', 'Carga un documento del asegurado antes de pedir lectura asistida.');
       return;
     }
+    if (!ensureAnthropicKeyForVerification()) return;
 
     const file = altaDocumentFile.file;
     setReadingDocumentLabel('Leyendo documento del asegurado');
@@ -1680,9 +1707,41 @@ function App() {
       });
       setAlta((current) => mapAltaExtraction(current, result));
       const detectedType = resolveDetectedDocumentType(result);
-      setAltaDocumentFile((current) => applyDetectedDocumentType(current, detectedType));
+      setAltaDocumentFile((current) => {
+        if (!current || current.file !== file) return current;
+        return applyConstanciaReadResult(
+          applyDetectedDocumentType(current, detectedType),
+          file,
+          detectedType
+        );
+      });
       pushToast('Lectura completada');
     } catch (readError) {
+      setAltaDocumentFile((current) => markConstanciaReadAttempted(current, file));
+      openErrorModal('Error de lectura', readError.message || 'No se pudo completar la lectura del archivo.');
+    } finally {
+      setReadingDocument(false);
+    }
+  }
+
+  async function readAltaConstancia() {
+    if (!altaConstanciaFile) return;
+    if (!ensureAnthropicKeyForVerification()) return;
+
+    const file = altaConstanciaFile.file;
+    setReadingDocumentLabel('Leyendo constancia de situación fiscal');
+    setReadingDocument(true);
+    pushToast('Leyendo constancia de situación fiscal con Anthropic...');
+    try {
+      const result = await callAnthropic(file, {
+        prompt: buildAltaAnthropicPrompt(alta.tipo),
+        errorLabel: 'leer la constancia de situación fiscal'
+      });
+      const detectedType = resolveDetectedDocumentType(result);
+      setAltaConstanciaFile((current) => applyConstanciaReadResult(current, file, detectedType));
+      pushToast('Lectura completada');
+    } catch (readError) {
+      setAltaConstanciaFile((current) => markConstanciaReadAttempted(current, file));
       openErrorModal('Error de lectura', readError.message || 'No se pudo completar la lectura del archivo.');
     } finally {
       setReadingDocument(false);
@@ -1763,7 +1822,7 @@ function App() {
       return;
     }
 
-    if (!isAltaComplete(alta, { hasConstancia: hasConstanciaDocument(altaDocumentFile, altaConstanciaFile) })) {
+    if (!isAltaComplete(alta, { hasConstancia: hasVerifiedConstancia })) {
       openErrorModal('Faltan datos', 'Completa todos los campos requeridos.');
       return;
     }
@@ -2524,7 +2583,10 @@ function App() {
                       sizeMb: (file.size / 1048576).toFixed(1),
                       cat: 'alta-documento',
                       docType: '',
-                      docTypeSource: ''
+                      docTypeSource: '',
+                      aiDetectedType: null,
+                      aiReadAttempted: false,
+                      overrideConfirmed: false
                     });
                   }}
                 />
@@ -2708,38 +2770,75 @@ function App() {
             </div>
             {alta.requiereFactura ? (
               <div className="mini-field">
-                {altaDocumentFile?.docType === CONSTANCIA_DOCUMENT_ID ? (
-                  <span className="pill tone-ok">Constancia de situación fiscal ya cargada arriba</span>
+                {hasVerifiedConstancia ? (
+                  <span className="pill tone-ok">
+                    Constancia de situación fiscal verificada mediante {isConstanciaVerified(altaDocumentFile) ? 'el documento del asegurado' : 'la carga dedicada'}
+                  </span>
                 ) : (
-                  <div className="upload-card">
-                    <label>
-                      Constancia de situación fiscal <span className="required-mark">*</span>
-                    </label>
-                    <label className="dropzone">
-                      <strong>Sube la constancia de situación fiscal</strong>
-                      <small>PDF, JPG o PNG</small>
-                      <input
-                        type="file"
-                        accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
-                        onChange={(event) => {
-                          const selected = Array.from(event.target.files || []);
-                          if (!selected.length) return;
-                          const file = selected[0];
-                          setAltaConstanciaFile({
-                            file,
-                            name: file.name,
-                            type: file.type,
-                            sizeMb: (file.size / 1048576).toFixed(1),
-                            cat: 'alta-constancia'
-                          });
-                        }}
-                      />
-                    </label>
-                  </div>
+                  <>
+                    {generalConstanciaClaimStatus === 'conflict' ? (
+                      <>
+                        <span className="pill tone-bad">La IA identificó un documento distinto a la constancia</span>
+                        <small className="field-hint">El documento fue marcado como constancia, pero la IA no lo confirmó. La constancia sigue siendo requerida.</small>
+                      </>
+                    ) : null}
+                    {generalConstanciaClaimStatus === 'unverified' ? (
+                      <small className="field-hint">Lee el documento del asegurado para que la IA pueda verificar la constancia.</small>
+                    ) : null}
+                    <div className="upload-card">
+                      <label>
+                        Constancia de situación fiscal <span className="required-mark">*</span>
+                      </label>
+                      <label className="dropzone">
+                        <strong>Sube la constancia de situación fiscal</strong>
+                        <small>PDF, JPG o PNG</small>
+                        <input
+                          type="file"
+                          accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                          onChange={(event) => {
+                            const selected = Array.from(event.target.files || []);
+                            if (!selected.length) return;
+                            const file = selected[0];
+                            setAltaConstanciaFile({
+                              file,
+                              name: file.name,
+                              type: file.type,
+                              sizeMb: (file.size / 1048576).toFixed(1),
+                              cat: 'alta-constancia',
+                              aiDetectedType: null,
+                              aiReadAttempted: false,
+                              overrideConfirmed: false
+                            });
+                          }}
+                        />
+                      </label>
+                    </div>
+                  </>
                 )}
-                {/* Rendered outside the branch above: a constancia uploaded here must
-                    stay visible and removable even if the general document is later
-                    typed as a constancia and satisfies the requirement on its own. */}
+                {altaDocumentFile?.docType === CONSTANCIA_DOCUMENT_ID && altaDocumentFile.aiReadAttempted && !isConstanciaVerified(altaDocumentFile) ? (
+                  <label className="final-confirmation">
+                    <input
+                      type="checkbox"
+                      checked={altaDocumentFile.overrideConfirmed === true}
+                      onChange={(event) => setAltaDocumentFile((current) => (
+                        current ? { ...current, overrideConfirmed: event.target.checked } : current
+                      ))}
+                    />
+                    La IA no pudo verificar este documento. Confirmo bajo mi responsabilidad que es la constancia de situación fiscal.
+                  </label>
+                ) : null}
+                {altaConstanciaFile && altaConstanciaFile.aiReadAttempted && !isConstanciaVerified(altaConstanciaFile) ? (
+                  <label className="final-confirmation">
+                    <input
+                      type="checkbox"
+                      checked={altaConstanciaFile.overrideConfirmed === true}
+                      onChange={(event) => setAltaConstanciaFile((current) => (
+                        current ? { ...current, overrideConfirmed: event.target.checked } : current
+                      ))}
+                    />
+                    La IA no pudo verificar este documento. Confirmo bajo mi responsabilidad que es la constancia de situación fiscal.
+                  </label>
+                ) : null}
                 {altaConstanciaFile ? (
                   <div className="upload-files">
                     <div className="upload-file">
@@ -2749,6 +2848,14 @@ function App() {
                           {altaConstanciaFile.cat.toUpperCase()} · {altaConstanciaFile.sizeMb} MB · {altaConstanciaFile.type || 'archivo'}
                         </span>
                       </div>
+                      <button
+                        type="button"
+                        className="primary-button"
+                        onClick={readAltaConstancia}
+                        disabled={readingDocument || !altaConstanciaFile}
+                      >
+                        {readingDocument && readingDocumentLabel === 'Leyendo constancia de situación fiscal' ? 'Leyendo...' : 'Leer documento'}
+                      </button>
                       <button
                         type="button"
                         className="ghost-button danger"
