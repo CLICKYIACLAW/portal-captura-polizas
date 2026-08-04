@@ -209,22 +209,22 @@ describe('PR D — alta conditional required/invalid logic', () => {
       assert.ok(missing.includes('regimenClave'));
     });
 
-    it('adds synthetic documento key when requiereFactura && !hasDocument', () => {
-      const missing = getAltaMissingKeys(baseAlta({ requiereFactura: true }), { hasDocument: false });
+    it('adds synthetic documento key when requiereFactura && !hasConstancia', () => {
+      const missing = getAltaMissingKeys(baseAlta({ requiereFactura: true }), { hasConstancia: false });
       assert.ok(missing.includes('documento'));
     });
 
     it('does not add documento when requiereFactura is false', () => {
-      const missing = getAltaMissingKeys(baseAlta({ requiereFactura: false }), { hasDocument: false });
+      const missing = getAltaMissingKeys(baseAlta({ requiereFactura: false }), { hasConstancia: false });
       assert.ok(!missing.includes('documento'));
     });
 
-    it('does not add documento when hasDocument is true', () => {
-      const missing = getAltaMissingKeys(baseAlta({ requiereFactura: true }), { hasDocument: true });
+    it('does not add documento when hasConstancia is true', () => {
+      const missing = getAltaMissingKeys(baseAlta({ requiereFactura: true }), { hasConstancia: true });
       assert.ok(!missing.includes('documento'));
     });
 
-    it('defaults hasDocument to true so callers are not silently broken', () => {
+    it('defaults hasConstancia to true so callers are not silently broken', () => {
       const missing = getAltaMissingKeys(baseAlta({ requiereFactura: true }));
       assert.ok(!missing.includes('documento'));
     });
@@ -261,14 +261,14 @@ describe('PR D — alta conditional required/invalid logic', () => {
       assert.equal(isAltaComplete(baseAlta({ requiereFactura: false })), true);
     });
 
-    it('returns false when document is required but missing', () => {
+    it('returns false when constancia is required but missing', () => {
       const alta = baseAlta({ requiereFactura: true, rfc: 'GODE561231GR8', curp: 'CURP', giro: 'G', regimen: '626 - X', regimenClave: '626', usoCfdi: 'G03 - X' });
-      assert.equal(isAltaComplete(alta, { hasDocument: false }), false);
+      assert.equal(isAltaComplete(alta, { hasConstancia: false }), false);
     });
 
-    it('returns true when document is required and present', () => {
+    it('returns true when constancia is required and present', () => {
       const alta = baseAlta({ requiereFactura: true, rfc: 'GODE561231GR8', curp: 'CURP', giro: 'G', regimen: '626 - X', regimenClave: '626', usoCfdi: 'G03 - X' });
-      assert.equal(isAltaComplete(alta, { hasDocument: true }), true);
+      assert.equal(isAltaComplete(alta, { hasConstancia: true }), true);
     });
   });
 
@@ -285,7 +285,7 @@ describe('PR D — alta conditional required/invalid logic', () => {
       assert.ok(hint.toLowerCase().includes('uso de cfdi'));
     });
 
-    it('mentions documento del asegurado when document is missing', () => {
+    it('mentions constancia de situación fiscal when constancia is missing', () => {
       const hint = getAltaSaveHint(baseAlta({
         requiereFactura: true,
         rfc: 'GODE561231GR8',
@@ -294,8 +294,8 @@ describe('PR D — alta conditional required/invalid logic', () => {
         regimen: '626 - Régimen Simplificado de Confianza',
         regimenClave: '626',
         usoCfdi: 'G03 - Gastos en general'
-      }), { hasDocument: false });
-      assert.ok(hint.toLowerCase().includes('documento del asegurado'));
+      }), { hasConstancia: false });
+      assert.ok(hint.toLowerCase().includes('constancia de situación fiscal'));
     });
   });
 });

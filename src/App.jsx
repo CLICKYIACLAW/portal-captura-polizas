@@ -50,6 +50,12 @@ import {
 } from './lib/utils';
 import { findGroupNameMatches } from './lib/groupCatalog';
 import {
+  ALTA_DOCUMENT_TYPES,
+  CONSTANCIA_DOCUMENT_ID,
+  applyDetectedDocumentType,
+  resolveDetectedDocumentType
+} from './lib/altaDocumentTypes';
+import {
   REGIMENES_FISCALES,
   formatRegimenOption,
   formatUsoCfdiOption,
@@ -1002,11 +1008,11 @@ function App() {
   const [altaDocumentFile, setAltaDocumentFile] = useState(null);
   const altaNotes = useMemo(() => buildAltaFieldNotes(alta), [alta]);
   const altaComplete = useMemo(
-    () => isAltaComplete(alta, { hasDocument: Boolean(altaDocumentFile) }),
+    () => isAltaComplete(alta, { hasConstancia: altaDocumentFile?.docType === CONSTANCIA_DOCUMENT_ID }),
     [alta, altaDocumentFile]
   );
   const altaHint = useMemo(
-    () => getAltaSaveHint(alta, { hasDocument: Boolean(altaDocumentFile) }),
+    () => getAltaSaveHint(alta, { hasConstancia: altaDocumentFile?.docType === CONSTANCIA_DOCUMENT_ID }),
     [alta, altaDocumentFile]
   );
   const altaUsoCfdiOptions = useMemo(
@@ -1670,6 +1676,8 @@ function App() {
         errorLabel: 'leer el documento del asegurado'
       });
       setAlta((current) => mapAltaExtraction(current, result));
+      const detectedType = resolveDetectedDocumentType(result);
+      setAltaDocumentFile((current) => applyDetectedDocumentType(current, detectedType));
       pushToast('Lectura completada');
     } catch (readError) {
       openErrorModal('Error de lectura', readError.message || 'No se pudo completar la lectura del archivo.');
@@ -1752,7 +1760,7 @@ function App() {
       return;
     }
 
-    if (!isAltaComplete(alta, { hasDocument: Boolean(altaDocumentFile) })) {
+    if (!isAltaComplete(alta, { hasConstancia: altaDocumentFile?.docType === CONSTANCIA_DOCUMENT_ID })) {
       openErrorModal('Faltan datos', 'Completa todos los campos requeridos.');
       return;
     }
@@ -2494,12 +2502,16 @@ function App() {
             </div>
 
             <div className="form-divider">
-              Documento del asegurado
+              {alta.requiereFactura ? 'Constancia de situación fiscal' : 'Documento del asegurado'}
               {!alta.requiereFactura ? ' (opcional)' : <span className="required-mark"> *</span>}
             </div>
             <div className="upload-card">
               <label className="dropzone">
-                <strong>Sube RFC, constancia de situación fiscal, comprobante de domicilio o INE</strong>
+                <strong>
+                  {alta.requiereFactura
+                    ? 'Sube la constancia de situación fiscal'
+                    : 'Sube RFC, constancia de situación fiscal, comprobante de domicilio o INE'}
+                </strong>
                 <small>PDF, JPG o PNG · la IA llena el formulario y tú lo complementas</small>
                 <input
                   type="file"
@@ -2513,7 +2525,9 @@ function App() {
                       name: file.name,
                       type: file.type,
                       sizeMb: (file.size / 1048576).toFixed(1),
-                      cat: 'alta-documento'
+                      cat: 'alta-documento',
+                      docType: '',
+                      docTypeSource: ''
                     });
                   }}
                 />
@@ -2534,6 +2548,36 @@ function App() {
                     >
                       Quitar
                     </button>
+                  </div>
+                </div>
+              ) : null}
+              {altaDocumentFile ? (
+                <div className="ramo-grid alta-grid">
+                  <div className="mini-field">
+                    <label>
+                      <span>¿Qué documento es? {alta.requiereFactura ? <span className="required-mark">*</span> : null}</span>
+                      {altaDocumentFile.docTypeSource === 'ai' ? (
+                        <span className="pill tone-info">Detectado automáticamente</span>
+                      ) : null}
+                    </label>
+                    <select
+                      value={altaDocumentFile.docType}
+                      onChange={(event) =>
+                        setAltaDocumentFile((current) =>
+                          current ? { ...current, docType: event.target.value, docTypeSource: 'user' } : current
+                        )
+                      }
+                    >
+                      <option value="">Selecciona el tipo de documento</option>
+                      {ALTA_DOCUMENT_TYPES.map((type) => (
+                        <option key={type.id} value={type.id}>
+                          {type.label}
+                        </option>
+                      ))}
+                    </select>
+                    {altaDocumentFile.docTypeSource === 'ai' ? (
+                      <small className="field-hint">Verifica que el tipo detectado sea correcto.</small>
+                    ) : null}
                   </div>
                 </div>
               ) : null}
