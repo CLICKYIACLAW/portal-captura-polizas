@@ -204,17 +204,23 @@ export function selectCaptureGerencia(current, value, layoutLength) {
 }
 
 export function getGenericAssignmentToggleState({ vendedoresLoading, genericVendor, assignmentMode }) {
-  const checked = assignmentMode === 'generic';
-
   if (vendedoresLoading) {
-    return { disabled: true, checked, statusLabel: 'Cargando vendedores...' };
+    return { disabled: true, label: 'Cargando vendedores...' };
   }
 
   if (!genericVendor) {
-    return { disabled: true, checked, statusLabel: 'No disponible: el catálogo no contiene VG001' };
+    return {
+      disabled: true,
+      label: 'No disponible: el catálogo no contiene VG001'
+    };
   }
 
-  return { disabled: false, checked, statusLabel: '' };
+  return {
+    disabled: false,
+    label: assignmentMode === 'generic'
+      ? 'Elegir vendedor manualmente'
+      : 'Usar vendedor genérico'
+  };
 }
 
 function normalizeTokens(value) {
@@ -1881,26 +1887,14 @@ function App() {
             headAlign="left"
           >
             <div className="read-actions">
-              <div className="assignment-toggle">
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={genericAssignmentToggleState.checked}
-                  aria-disabled={genericAssignmentToggleState.disabled}
-                  disabled={genericAssignmentToggleState.disabled}
-                  title={genericAssignmentToggleState.statusLabel || undefined}
-                  className={`toggle-switch${genericAssignmentToggleState.checked ? ' is-on' : ''}`}
-                  onClick={handleToggleAssignmentMode}
-                >
-                  <span className="toggle-switch-thumb" aria-hidden="true" />
-                </button>
-                <div className="assignment-toggle-copy">
-                  <span className="assignment-toggle-label">Vendedor genérico</span>
-                  {genericAssignmentToggleState.statusLabel ? (
-                    <span className="assignment-toggle-status">{genericAssignmentToggleState.statusLabel}</span>
-                  ) : null}
-                </div>
-              </div>
+              <button
+                type="button"
+                className="secondary-button"
+                disabled={genericAssignmentToggleState.disabled}
+                onClick={handleToggleAssignmentMode}
+              >
+                {genericAssignmentToggleState.label}
+              </button>
             </div>
             <div className="combo-grid">
               {showCaptureContextCombos ? (
@@ -1932,7 +1926,7 @@ function App() {
                   }
                 />
               ) : null}
-              {capture.assignmentMode !== 'generic' ? (
+              {capture.assignmentMode !== 'generic' && (
                 <ComboField
                   label="Vendedor"
                   value={capture.vendedor}
@@ -1959,16 +1953,8 @@ function App() {
                     );
                   }}
                 />
-              ) : (
-                <div className="combo-field">
-                  <label>Vendedor</label>
-                  <div className="generic-field-tag">
-                    <span className="pill accent">Vendedor genérico</span>
-                    {capture.vendedor ? <span className="generic-field-value">{capture.vendedor}</span> : null}
-                  </div>
-                </div>
               )}
-              {capture.assignmentMode !== 'generic' ? (
+              {capture.assignmentMode !== 'generic' && (
                 <ComboField
                   label="Asegurado"
                   value={capture.asegurado}
@@ -2000,14 +1986,6 @@ function App() {
                   }
                   onAction={(query) => openAltaFromCapture(query)}
                 />
-              ) : (
-                <div className="combo-field">
-                  <label>Asegurado</label>
-                  <div className="generic-field-tag">
-                    <span className="pill accent">Asegurado genérico</span>
-                    {capture.asegurado ? <span className="generic-field-value">{capture.asegurado}</span> : null}
-                  </div>
-                </div>
               )}
               <ComboField
                 label="Ramo"

@@ -1,4 +1,4 @@
-import { fetchJson } from './utils.js';
+import { fetchJson } from './utils';
 
 const API_URL = '/api';
 const BI_CLIENT_ID = 'ClickIA';
