@@ -2326,14 +2326,11 @@ function App() {
                 <div className="warning-box">Revisa que prima neta, gastos, descuento, IVA, subtotal y total cuadren antes de guardar.</div>
               </Card>
 
-              <Card title="Formulario de póliza" subtitle="Datos extraídos para validar la captura" headAlign="left">
-                <SectionFields
-                  sections={POLIZA_LAYOUT_DISPLAY_SECTIONS}
-                  fields={POLIZA_LAYOUT_FIELDS}
-                  layout={capture.layout}
-                  onChange={updateLayout}
-                  notes={fieldNotes}
-                />
+              <Card title="Formulario de póliza" subtitle="Confirma la información y guarda la póliza" headAlign="left">
+                {/* The extracted policy fields are intentionally hidden from the end user while the
+                    underlying layout data is still captured and saved. Do NOT delete the SectionFields
+                    plumbing (POLIZA_LAYOUT_DISPLAY_SECTIONS / POLIZA_LAYOUT_FIELDS / updateLayout /
+                    fieldNotes): the AI extraction still fills capture.layout and savePoliza still sends it. */}
                 <label className="final-confirmation">
                   <input
                     type="checkbox"
