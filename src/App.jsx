@@ -49,6 +49,18 @@ import {
   splitName
 } from './lib/utils';
 import { findGroupNameMatches } from './lib/groupCatalog';
+import {
+  addDependentOrder,
+  createDependentOrder,
+  formatDateInput,
+  parseDateInput,
+  removeDependentOrder,
+  updateDependentOrder,
+  validateDependentOrder,
+  parseIsoDate,
+  formatIsoDate,
+  daysInMonth
+} from './lib/dependentOrders';
 import { applyAltaContextChange, importCaptureAssignment, toggleAltaGenericVendor } from './lib/altaAssignment';
 import {
   REGIMENES_FISCALES,
@@ -109,7 +121,8 @@ export function emptyCapture(length = POLIZA_LAYOUT_FIELDS.length) {
     files: [],
     extracted: false,
     confirmed: false,
-    documentsInvalidated: false
+    documentsInvalidated: false,
+    dependentOrders: []
   };
 }
 
@@ -872,6 +885,331 @@ function Modal({
 /** How long the "request sent" notice stays up before the modal closes itself. */
 const GROUP_REQUEST_NOTICE_MS = 1800;
 
+const MONTH_LABELS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
+const WEEKDAY_LABELS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
+const WEEKDAY_SHORT_LABELS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+
+function DatePicker({
+  id,
+  label,
+  value,
+  onChange,
+  ariaDescribedBy,
+  disabled = false
+}) {
+  const [open, setOpen] = useState(false);
+  const [inputText, setInputText] = useState(formatDateInput(value));
+  const [viewMonth, setViewMonth] = useState(() => {
+    const parts = parseIsoDate(value);
+    if (parts) return { year: parts.year, month: parts.month };
+    const today = new Date();
+    return { year: today.getFullYear(), month: today.getMonth() + 1 };
+  });
+  const [activeIso, setActiveIso] = useState(value || '');
+  const [error, setError] = useState('');
+  const inputRef = useRef(null);
+  const popoverRef = useRef(null);
+  const gridRef = useRef(null);
+
+  useEffect(() => {
+    setInputText(formatDateInput(value));
+    const parts = parseIsoDate(value);
+    if (parts) {
+      setViewMonth({ year: parts.year, month: parts.month });
+      setActiveIso(value);
+    }
+    setError('');
+  }, [value]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+
+    function handleDocumentMouseDown(event) {
+      const target = event.target;
+      const popover = popoverRef.current;
+      const input = inputRef.current;
+      if (
+        popover &&
+        input &&
+        !popover.contains(target) &&
+        !input.contains(target)
+      ) {
+        setOpen(false);
+      }
+    }
+
+    function handleDocumentKeyDown(event) {
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        setOpen(false);
+        inputRef.current?.focus();
+      }
+    }
+
+    document.addEventListener('mousedown', handleDocumentMouseDown);
+    document.addEventListener('keydown', handleDocumentKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleDocumentMouseDown);
+      document.removeEventListener('keydown', handleDocumentKeyDown);
+    };
+  }, [open]);
+
+  useEffect(() => {
+    if (open && gridRef.current) {
+      const activeButton = gridRef.current.querySelector('[tabindex="0"]');
+      activeButton?.focus();
+    }
+  }, [open, viewMonth, activeIso]);
+
+  function firstDayOffset(year, month) {
+    return new Date(year, month - 1, 1).getDay();
+  }
+
+  function buildCalendarDays(year, month) {
+    const days = [];
+    const offset = firstDayOffset(year, month);
+    const prevDays = daysInMonth(year, month - 1);
+    for (let i = offset - 1; i >= 0; i -= 1) {
+      days.push({ year, month: month - 1, day: prevDays - i, currentMonth: false });
+    }
+    const currentDays = daysInMonth(year, month);
+    for (let day = 1; day <= currentDays; day += 1) {
+      days.push({ year, month, day, currentMonth: true });
+    }
+    const remaining = (7 - (days.length % 7)) % 7;
+    for (let day = 1; day <= remaining; day += 1) {
+      days.push({ year, month: month + 1, day, currentMonth: false });
+    }
+    return days;
+  }
+
+  function isoForDay(dayItem) {
+    let { year, month } = dayItem;
+    if (month === 0) {
+      month = 12;
+      year -= 1;
+    } else if (month === 13) {
+      month = 1;
+      year += 1;
+    }
+    return formatIsoDate({ year, month, day: dayItem.day });
+  }
+
+  function shiftViewMonth(deltaYear, deltaMonth) {
+    setViewMonth((current) => {
+      let nextMonth = current.month + deltaMonth;
+      let nextYear = current.year + deltaYear;
+      while (nextMonth > 12) {
+        nextMonth -= 12;
+        nextYear += 1;
+      }
+      while (nextMonth < 1) {
+        nextMonth += 12;
+        nextYear -= 1;
+      }
+      return { year: nextYear, month: nextMonth };
+    });
+  }
+
+  function moveActiveDay(deltaDays) {
+    const currentIso = activeIso || isoForDay(buildCalendarDays(viewMonth.year, viewMonth.month).find((d) => d.currentMonth));
+    if (!currentIso) return;
+    const parts = parseIsoDate(currentIso);
+    if (!parts) return;
+    const { year, month, day } = parts;
+    const limit = daysInMonth(year, month);
+    let nextDay = day + deltaDays;
+    let nextMonth = month;
+    let nextYear = year;
+    if (nextDay > limit) {
+      nextDay -= limit;
+      nextMonth += 1;
+      if (nextMonth > 12) {
+        nextMonth = 1;
+        nextYear += 1;
+      }
+    } else if (nextDay < 1) {
+      nextMonth -= 1;
+      if (nextMonth < 1) {
+        nextMonth = 12;
+        nextYear -= 1;
+      }
+      nextDay = daysInMonth(nextYear, nextMonth) + nextDay;
+    }
+    const nextIso = formatIsoDate({ year: nextYear, month: nextMonth, day: nextDay });
+    setActiveIso(nextIso);
+    setViewMonth({ year: nextYear, month: nextMonth });
+  }
+
+  function selectDate(iso) {
+    setOpen(false);
+    setError('');
+    onChange(iso);
+    inputRef.current?.focus();
+  }
+
+  function commitInputText(text) {
+    const result = parseDateInput(text);
+    if (result === '') {
+      setError('');
+      onChange('');
+    } else if (result === null) {
+      setError('Fecha inválida. Usa DD/MM/AAAA.');
+    } else {
+      setError('');
+      onChange(result);
+    }
+  }
+
+  function handleInputKeyDown(event) {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      commitInputText(inputText);
+    } else if (event.key === 'ArrowDown' && open) {
+      event.preventDefault();
+      moveActiveDay(7);
+    } else if (event.key === 'ArrowUp' && open) {
+      event.preventDefault();
+      moveActiveDay(-7);
+    } else if (event.key === 'ArrowLeft' && open) {
+      event.preventDefault();
+      moveActiveDay(-1);
+    } else if (event.key === 'ArrowRight' && open) {
+      event.preventDefault();
+      moveActiveDay(1);
+    } else if (event.key === 'Home' && open) {
+      event.preventDefault();
+      const parts = activeIso ? parseIsoDate(activeIso) : null;
+      const dayOfWeek = parts ? new Date(parts.year, parts.month - 1, parts.day).getDay() : 0;
+      moveActiveDay(-dayOfWeek);
+    } else if (event.key === 'End' && open) {
+      event.preventDefault();
+      const parts = activeIso ? parseIsoDate(activeIso) : null;
+      const dayOfWeek = parts ? new Date(parts.year, parts.month - 1, parts.day).getDay() : 6;
+      moveActiveDay(6 - dayOfWeek);
+    } else if (event.key === 'PageUp') {
+      event.preventDefault();
+      if (event.shiftKey) {
+        shiftViewMonth(-1, 0);
+      } else {
+        shiftViewMonth(0, -1);
+      }
+    } else if (event.key === 'PageDown') {
+      event.preventDefault();
+      if (event.shiftKey) {
+        shiftViewMonth(1, 0);
+      } else {
+        shiftViewMonth(0, 1);
+      }
+    }
+  }
+
+  function handleGridKeyDown(event, dayIso) {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      selectDate(dayIso);
+    } else if (event.key === 'Escape') {
+      event.preventDefault();
+      setOpen(false);
+      inputRef.current?.focus();
+    }
+  }
+
+  const calendarDays = buildCalendarDays(viewMonth.year, viewMonth.month);
+  const today = new Date();
+  const todayIso = formatIsoDate({ year: today.getFullYear(), month: today.getMonth() + 1, day: today.getDate() });
+
+  return (
+    <div className="date-picker">
+      <label htmlFor={id}>{label}</label>
+      <input
+        id={id}
+        ref={inputRef}
+        type="text"
+        inputMode="numeric"
+        placeholder="DD/MM/AAAA"
+        value={inputText}
+        disabled={disabled}
+        aria-invalid={error ? 'true' : undefined}
+        aria-describedby={error ? `${id}-error` : ariaDescribedBy}
+        onChange={(event) => setInputText(event.target.value)}
+        onClick={() => setOpen((current) => !current)}
+        onBlur={() => commitInputText(inputText)}
+        onKeyDown={handleInputKeyDown}
+      />
+      {error ? (
+        <span id={`${id}-error`} className="date-picker-error">
+          {error}
+        </span>
+      ) : null}
+      {open ? (
+        <div ref={popoverRef} className="date-picker-popover">
+          <div className="date-picker-header">
+            <button
+              type="button"
+              className="date-picker-prev"
+              aria-label="Mes anterior"
+              onClick={() => shiftViewMonth(0, -1)}
+            >
+              ‹
+            </button>
+            <span className="date-picker-month" aria-live="polite">
+              {MONTH_LABELS[viewMonth.month - 1]} {viewMonth.year}
+            </span>
+            <button
+              type="button"
+              className="date-picker-next"
+              aria-label="Mes siguiente"
+              onClick={() => shiftViewMonth(0, 1)}
+            >
+              ›
+            </button>
+          </div>
+          <div ref={gridRef} className="date-picker-grid" role="grid" aria-label={`Calendario ${viewMonth.month}/${viewMonth.year}`}>
+            <div className="date-picker-weekdays" role="row">
+              {WEEKDAY_SHORT_LABELS.map((name) => (
+                <span key={name} role="columnheader" aria-label={name}>
+                  {name}
+                </span>
+              ))}
+            </div>
+            {Array.from({ length: 6 }).map((_, weekIndex) => {
+              const weekDays = calendarDays.slice(weekIndex * 7, weekIndex * 7 + 7);
+              if (weekDays.length < 7 || !weekDays.some((d) => d.currentMonth)) return null;
+              return (
+                <div key={weekIndex} className="date-picker-week" role="row">
+                  {weekDays.map((dayItem) => {
+                    const dayIso = isoForDay(dayItem);
+                    const isSelected = dayIso === value;
+                    const isToday = dayIso === todayIso;
+                    const isActive = dayIso === activeIso;
+                    return (
+                      <button
+                        key={dayIso}
+                        type="button"
+                        role="gridcell"
+                        tabIndex={isActive ? 0 : -1}
+                        aria-selected={isSelected || undefined}
+                        aria-label={`${dayItem.day} de ${WEEKDAY_LABELS[viewMonth.month - 1]} de ${viewMonth.year}${isToday ? ' (hoy)' : ''}`}
+                        className={`date-picker-day ${dayItem.currentMonth ? '' : 'adjacent'} ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}`}
+                        onClick={() => selectDate(dayIso)}
+                        onKeyDown={(event) => handleGridKeyDown(event, dayIso)}
+                        onFocus={() => setActiveIso(dayIso)}
+                      >
+                        {dayItem.day}
+                      </button>
+                    );
+                  })}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function useGroupModal({
   alta,
   setAlta,
@@ -1040,6 +1378,12 @@ function App() {
   const [aseguradosLoading, setAseguradosLoading] = useState(false);
   const [groupsLoading, setGroupsLoading] = useState(false);
   const [readingDocument, setReadingDocument] = useState(false);
+  const [dependentOrderModal, setDependentOrderModal] = useState({
+    open: false,
+    mode: 'create',
+    draft: createDependentOrder(),
+    errors: {}
+  });
 
   const {
     groupModal,
@@ -1146,6 +1490,71 @@ function App() {
     [groupModal.name, groupCatalog]
   );
   const canCreateGroup = Boolean(normalizeText(groupModal.name)) && groupMatches.length === 0;
+
+  function openDependentOrderModal(order = null) {
+    const draft = order
+      ? { ...order }
+      : createDependentOrder({ asegurado: capture.asegurado, ramo: capture.ramo, subramo: capture.subramo });
+    setDependentOrderModal({
+      open: true,
+      mode: order ? 'edit' : 'create',
+      draft,
+      errors: {}
+    });
+  }
+
+  function closeDependentOrderModal() {
+    setDependentOrderModal({
+      open: false,
+      mode: 'create',
+      draft: createDependentOrder(),
+      errors: {}
+    });
+  }
+
+  function updateDependentOrderDraft(patch) {
+    setDependentOrderModal((current) => ({
+      ...current,
+      draft: { ...current.draft, ...patch }
+    }));
+  }
+
+  function saveDependentOrderModal() {
+    const { draft } = dependentOrderModal;
+    const hasSubramosForDraft =
+      Boolean(normalizeText(draft.ramo)) &&
+      normalizeKey(draft.ramo) === normalizeKey(capture.ramo) &&
+      subramoOptions.length > 0;
+    const validation = validateDependentOrder(draft, hasSubramosForDraft ? subramoOptions : []);
+
+    if (!validation.valid) {
+      setDependentOrderModal((current) => ({ ...current, errors: validation.errors }));
+      return;
+    }
+
+    setCapture((current) => {
+      const order = {
+        ...draft,
+        asegurado: current.asegurado
+      };
+      if (dependentOrderModal.mode === 'create') {
+        return { ...current, dependentOrders: addDependentOrder(current.dependentOrders, order) };
+      }
+      return {
+        ...current,
+        dependentOrders: updateDependentOrder(current.dependentOrders, draft.id, order)
+      };
+    });
+
+    closeDependentOrderModal();
+  }
+
+  function deleteDependentOrder(id) {
+    setCapture((current) => ({
+      ...current,
+      dependentOrders: removeDependentOrder(current.dependentOrders, id)
+    }));
+  }
 
   async function handleLogin(event) {
     event.preventDefault();
@@ -1904,6 +2313,124 @@ function App() {
       </form>
     </Modal>
   );
+  const dependentOrderModalNode = dependentOrderModal.open ? (
+    <Modal
+      open={dependentOrderModal.open}
+      title={dependentOrderModal.mode === 'create' ? 'Agregar OT dependiente' : 'Editar OT dependiente'}
+      tone="neutral"
+      titleId="dependent-order-modal-title"
+      onClose={closeDependentOrderModal}
+      actions={
+        <>
+          <button type="button" className="ghost-button" onClick={closeDependentOrderModal}>
+            Cancelar
+          </button>
+          <button
+            type="button"
+            className="primary-button"
+            onClick={saveDependentOrderModal}
+          >
+            {dependentOrderModal.mode === 'create' ? 'Agregar' : 'Guardar'}
+          </button>
+        </>
+      }
+    >
+      <form
+        id="dependent-order-modal-form"
+        className="dependent-order-modal-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          saveDependentOrderModal();
+        }}
+      >
+        <div className="mini-field">
+          <label htmlFor="dependent-order-folio">
+            Folio <span className="required-mark">*</span>
+          </label>
+          <input
+            id="dependent-order-folio"
+            type="text"
+            value={dependentOrderModal.draft.folio}
+            onChange={(event) => updateDependentOrderDraft({ folio: event.target.value })}
+            aria-describedby={dependentOrderModal.errors.folio ? 'dependent-order-folio-error' : undefined}
+          />
+          {dependentOrderModal.errors.folio ? (
+            <span id="dependent-order-folio-error" className="field-error">
+              {dependentOrderModal.errors.folio}
+            </span>
+          ) : null}
+        </div>
+        <div className="mini-field">
+          <label htmlFor="dependent-order-concepto">
+            Concepto <span className="required-mark">*</span>
+          </label>
+          <input
+            id="dependent-order-concepto"
+            type="text"
+            value={dependentOrderModal.draft.concepto}
+            onChange={(event) => updateDependentOrderDraft({ concepto: event.target.value })}
+            aria-describedby={dependentOrderModal.errors.concepto ? 'dependent-order-concepto-error' : undefined}
+          />
+          {dependentOrderModal.errors.concepto ? (
+            <span id="dependent-order-concepto-error" className="field-error">
+              {dependentOrderModal.errors.concepto}
+            </span>
+          ) : null}
+        </div>
+        <div className="mini-field">
+          <label htmlFor="dependent-order-asegurado">Asegurado</label>
+          <input
+            id="dependent-order-asegurado"
+            type="text"
+            value={dependentOrderModal.draft.asegurado}
+            readOnly
+          />
+        </div>
+        <ComboField
+          label="Ramo *"
+          value={dependentOrderModal.draft.ramo}
+          options={ramoOptions}
+          placeholder="Selecciona el ramo"
+          disabled={ramosLoading || !ramoOptions.length}
+          onSelect={(value) => updateDependentOrderDraft({ ramo: value, subramo: '' })}
+        />
+        {showSubramo ? (
+          <ComboField
+            label={subramoOptions.length ? 'Subramo *' : 'Subramo'}
+            value={dependentOrderModal.draft.subramo}
+            options={subramoOptions}
+            placeholder={subramosLoading ? 'Cargando subramos...' : 'Selecciona el subramo'}
+            disabled={subramosLoading || !subramoOptions.length}
+            onSelect={(value) => updateDependentOrderDraft({ subramo: value })}
+          />
+        ) : null}
+        <DatePicker
+          id="dependent-order-start-date"
+          label="Inicio de vigencia *"
+          value={dependentOrderModal.draft.startDate}
+          onChange={(iso) => updateDependentOrderDraft({ startDate: iso })}
+          ariaDescribedBy={dependentOrderModal.errors.startDate ? 'dependent-order-start-error' : undefined}
+        />
+        {dependentOrderModal.errors.startDate ? (
+          <span id="dependent-order-start-error" className="field-error">
+            {dependentOrderModal.errors.startDate}
+          </span>
+        ) : null}
+        <DatePicker
+          id="dependent-order-end-date"
+          label="Fin de vigencia *"
+          value={dependentOrderModal.draft.endDate}
+          onChange={(iso) => updateDependentOrderDraft({ endDate: iso })}
+          ariaDescribedBy={dependentOrderModal.errors.endDate ? 'dependent-order-end-error' : undefined}
+        />
+        {dependentOrderModal.errors.endDate ? (
+          <span id="dependent-order-end-error" className="field-error">
+            {dependentOrderModal.errors.endDate}
+          </span>
+        ) : null}
+      </form>
+    </Modal>
+  ) : null;
   const errorModalNode = errorModal ? (
     <Modal
       open={Boolean(errorModal)}
@@ -1929,6 +2456,7 @@ function App() {
     return (
       <>
         {groupModalNode}
+        {dependentOrderModalNode}
         {errorModalNode}
         <div className="login-screen">
           <div className="login-card">
@@ -1964,6 +2492,7 @@ function App() {
     return (
       <>
         {groupModalNode}
+        {dependentOrderModalNode}
         {errorModalNode}
         <div className="app-shell loading">
           <div className="hero-card">
@@ -1979,6 +2508,7 @@ function App() {
   return (
     <>
       {groupModalNode}
+      {dependentOrderModalNode}
       {errorModalNode}
       <div className={`app-shell ${captureLocked ? 'blocked' : ''}`}>
       <header className="topbar">
@@ -2189,7 +2719,55 @@ function App() {
               ) : null}
             </div>
 
+            <div className="dependent-order-entry">
+              <button
+                type="button"
+                className="inline-action"
+                onClick={() => openDependentOrderModal()}
+                disabled={!capture.asegurado || !capture.ramo}
+              >
+                Agregar OT dependiente
+              </button>
+              {!capture.asegurado || !capture.ramo ? (
+                <small className="inline-action-hint">Selecciona asegurado y ramo para agregar una OT</small>
+              ) : null}
+            </div>
+
           </Card>
+
+          {capture.dependentOrders.length > 0 ? (
+            <Card title="OTs dependientes" subtitle="Órdenes de trabajo de esta póliza" headAlign="left">
+              <div className="dependent-order-list">
+                {capture.dependentOrders.map((order) => (
+                  <div className="dependent-order-row" key={order.id}>
+                    <div className="dependent-order-meta">
+                      <strong>{order.folio}</strong>
+                      <span>{order.concepto}</span>
+                      <span>
+                        {formatDateInput(order.startDate)} - {formatDateInput(order.endDate)}
+                      </span>
+                    </div>
+                    <div className="dependent-order-actions">
+                      <button
+                        type="button"
+                        className="ghost-button"
+                        onClick={() => openDependentOrderModal(order)}
+                      >
+                        Editar
+                      </button>
+                      <button
+                        type="button"
+                        className="ghost-button danger"
+                        onClick={() => deleteDependentOrder(order.id)}
+                      >
+                        Eliminar
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </Card>
+          ) : null}
 
           {showDocumentsBlock ? (
             <Card
