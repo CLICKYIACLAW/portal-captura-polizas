@@ -348,14 +348,23 @@ describe('§2 — the capture → alta → capture round trip survives', () => {
     // vendor that was there *before* the import.
     assert.match(
       body,
-      /importCaptureAssignment\(\s*\{[\s\S]*?\},\s*captureContext,\s*vendorOptions\s*\)/,
-      'expected the imported assignment to be reconciled against the vendor catalogue'
+      /importCaptureAssignment\(emptyAlta\(\), captureContext, vendorOptions\)/,
+      'expected a blank alta to be seeded with the reconciled capture assignment'
     );
     assert.doesNotMatch(
       body,
       /\.\.\.captureContext\s*\}\)/,
       'expected the capture context to go through the reconciling helper, not a raw spread'
     );
+    // Spreading the alta already on screen over emptyAlta() silently defeats the
+    // reset: `current` carries every key emptyAlta() produces, so the previous
+    // asegurado's RFC, CURP, domicilio and fiscal data all survive it.
+    assert.doesNotMatch(
+      body,
+      /\.\.\.emptyAlta\(\)/,
+      'expected emptyAlta() to be the seed itself, not a base some stale state is spread over'
+    );
+    assert.doesNotMatch(body, /setAlta\(\(current\)/, 'expected the seed not to read the previous alta at all');
   });
 
   it('saveAlta returns to Captura writing the new name into capture.asegurado', async () => {

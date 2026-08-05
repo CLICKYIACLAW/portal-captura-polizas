@@ -1198,6 +1198,7 @@ function App() {
     setAlta(emptyAlta());
     setAltaDocumentFile(null);
     setAltaConstanciaFile(null);
+    setAltaReturnToCapture(false);
     setVendedorCatalog([]);
     setAseguradoCatalog([]);
     setLoading(false);
@@ -1579,15 +1580,32 @@ function App() {
     }
   }
 
+  /**
+   * Manual navigation. Leaving the alta flow by hand abandons the round trip, so
+   * the return flag cannot survive it: left standing, the next ordinary alta —
+   * one started from the Asegurados tab, about someone else entirely — would
+   * write its name into a capture the user never meant to touch and yank them
+   * back to Captura.
+   */
+  function selectTab(tabId) {
+    if (tabId !== 'asegurados') {
+      setAltaReturnToCapture(false);
+    }
+    setActiveTab(tabId);
+  }
+
   function openAltaFromCapture(name) {
     const captureContext = {
       linea: capture.linea,
       gerencia: capture.gerencia,
       vendedor: capture.vendedor
     };
-    setAlta((current) =>
-      importCaptureAssignment({ ...emptyAlta(), ...current }, captureContext, vendorOptions)
-    );
+    // Seeded from emptyAlta(), never from the alta already on screen: an
+    // abandoned registration leaves a full identity behind it — RFC, CURP,
+    // domicilio, régimen — and carrying any of that into the next asegurado
+    // would attach one person's fiscal identity to another. Only the capture
+    // assignment crosses over, reconciled against the vendor catalogue.
+    setAlta(importCaptureAssignment(emptyAlta(), captureContext, vendorOptions));
     setAltaReturnToCapture(true);
     setCaptureStateFromGroup(name);
     setActiveTab('asegurados');
@@ -1987,7 +2005,7 @@ function App() {
             key={tabId}
             type="button"
             className={activeTab === tabId ? 'tab active' : 'tab'}
-            onClick={() => setActiveTab(tabId)}
+            onClick={() => selectTab(tabId)}
           >
             <TabIcon tabId={tabId} />
             <span>{TAB_LABELS[tabId]}</span>
@@ -2107,9 +2125,10 @@ function App() {
                       )
                     }
                   />
-                  {/* Straight to Alta de asegurados carrying the capture
-                      assignment. The name is typed there, so nothing is handed
-                      over and the identity fields start blank. */}
+                  {/* Straight to Alta de asegurados. The only thing handed over
+                      is the capture assignment: the form itself is seeded from
+                      emptyAlta(), so every identity and fiscal field starts
+                      blank no matter what the previous alta held. */}
                   <button
                     type="button"
                     className="inline-action"
@@ -2710,6 +2729,7 @@ function App() {
                   setAlta(emptyAlta());
                   setAltaDocumentFile(null);
                   setAltaConstanciaFile(null);
+                  setAltaReturnToCapture(false);
                 }}
               >
                 Limpiar
