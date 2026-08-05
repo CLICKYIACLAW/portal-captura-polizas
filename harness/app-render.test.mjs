@@ -121,6 +121,21 @@ function setupFakeDom(storedAuth) {
   global.IS_REACT_ACT_ENVIRONMENT = true;
 }
 
+function walk(node, visit) {
+  visit(node);
+  for (const child of node.children || []) walk(child, visit);
+}
+
+/**
+ * React keeps the props it rendered a host element with on the element itself,
+ * which is the only handle on a click available here: the fake DOM has no event
+ * system, so the delegated listeners React installs never fire.
+ */
+function reactProps(node) {
+  const key = Object.keys(node).find((name) => name.startsWith('__reactProps$'));
+  return key ? node[key] : null;
+}
+
 /**
  * Renders the app and tears it down again. Unmounting matters: the signed-in
  * branch schedules catalog-loading effects, and leaving them running past the
@@ -137,18 +152,49 @@ async function renderApp(storedAuth) {
   return rendered;
 }
 
+const SIGNED_IN = JSON.stringify({
+  Nombre: 'Prueba',
+  Correo: 'prueba@example.com',
+  Grupo: 'G1',
+  IdVendedor: '1'
+});
+
 describe('App renders', () => {
   it('mounts without throwing when signed out', async () => {
     assert.equal(await renderApp(null), true, 'expected the signed-out render to produce DOM');
   });
 
   it('mounts without throwing when signed in', async () => {
-    const auth = JSON.stringify({
-      Nombre: 'Prueba',
-      Correo: 'prueba@example.com',
-      Grupo: 'G1',
-      IdVendedor: '1'
+    assert.equal(await renderApp(SIGNED_IN), true, 'expected the signed-in render to produce DOM');
+  });
+
+  /**
+   * Only the active tab's JSX is evaluated, so mounting alone leaves every tab
+   * but Captura unrendered — and an identifier that does not exist inside one of
+   * them throws only when that tab is opened, invisibly to the build. Walking
+   * through all four closes that gap.
+   */
+  it('renders every tab without throwing', async () => {
+    setupFakeDom(SIGNED_IN);
+    const { default: App } = await import('../src/App.jsx');
+    const container = global.document.createElement('div');
+    const root = createRoot(container);
+    await act(() => root.render(createElement(App)));
+
+    const tabs = [];
+    walk(container, (node) => {
+      const props = node.tagName === 'button' ? reactProps(node) : null;
+      if (props && typeof props.className === 'string' && props.className.split(' ')[0] === 'tab') {
+        tabs.push(props);
+      }
     });
-    assert.equal(await renderApp(auth), true, 'expected the signed-in render to produce DOM');
+    assert.equal(tabs.length, 4, 'expected the four navigation tabs');
+
+    for (const tab of tabs) {
+      await act(() => tab.onClick());
+      assert.ok(container.children.length > 0, 'expected the tab to render DOM');
+    }
+
+    await act(() => root.unmount());
   });
 });

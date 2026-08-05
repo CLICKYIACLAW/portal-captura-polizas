@@ -93,3 +93,95 @@ export function getUsosCfdiParaRegimen(claveRegimen) {
   if (!normalized) return [];
   return USOS_CFDI.filter((uso) => uso.regimenes.includes(normalized));
 }
+
+/**
+ * Filler words that carry no discriminating power between régimen names, so
+ * they must not inflate a match score.
+ */
+const REGIMEN_FILLER_TOKENS = new Set(['de', 'la', 'los', 'por', 'con', 'y', 'e', 'del', 'en', 'a']);
+
+/**
+ * Minimum share of a catalogue name's significant tokens that must appear in
+ * the text before a token-overlap match is trusted. A wrong régimen is worse
+ * than an empty one, so anything below this resolves to null.
+ */
+const REGIMEN_MATCH_THRESHOLD = 0.6;
+
+// Combining diacritical marks left behind by NFD decomposition.
+const COMBINING_MARKS = new RegExp('[\\u0300-\\u036f]', 'g');
+
+function normalizeRegimenText(value) {
+  return String(value ?? '')
+    .normalize('NFD')
+    .replace(COMBINING_MARKS, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+function significantRegimenTokens(normalized) {
+  return normalized.split(' ').filter((token) => token && !REGIMEN_FILLER_TOKENS.has(token));
+}
+
+/**
+ * Resolves free text (typically extracted from a document by the AI) to a
+ * `REGIMENES_FISCALES` entry, or `null` when nothing matches with reasonable
+ * confidence. Deterministic, in this order:
+ *
+ *  1. A standalone three-digit number that is a known clave wins outright.
+ *  2. Otherwise, comparing accent-stripped / lowercased / whitespace-collapsed
+ *     text against each `nombre`: exact match, then containment in either
+ *     direction — but only when exactly one catalogue entry qualifies, since an
+ *     ambiguous containment (e.g. the bare word "ingresos") is a guess.
+ *  3. Otherwise, the share of the catalogue name's significant tokens present
+ *     in the text, requiring `REGIMEN_MATCH_THRESHOLD` and a single winner.
+ *
+ * Never guesses: ties and low-confidence candidates return `null`.
+ */
+export function findClosestRegimen(text) {
+  const raw = String(text ?? '');
+
+  for (const candidate of raw.match(/\b\d{3}\b/g) || []) {
+    const byClave = findRegimenByClave(candidate);
+    if (byClave) return byClave;
+  }
+
+  const normalized = normalizeRegimenText(raw);
+  if (!normalized) return null;
+
+  const candidates = REGIMENES_FISCALES.map((regimen) => ({
+    regimen,
+    nombre: normalizeRegimenText(regimen.nombre)
+  }));
+
+  const exact = candidates.find((candidate) => candidate.nombre === normalized);
+  if (exact) return exact.regimen;
+
+  const contained = candidates.filter(
+    (candidate) => candidate.nombre.includes(normalized) || normalized.includes(candidate.nombre)
+  );
+  if (contained.length === 1) return contained[0].regimen;
+
+  const textTokens = new Set(significantRegimenTokens(normalized));
+  let best = null;
+  let bestScore = 0;
+  let tied = false;
+
+  for (const candidate of candidates) {
+    const nameTokens = significantRegimenTokens(candidate.nombre);
+    if (!nameTokens.length) continue;
+    const matched = nameTokens.filter((token) => textTokens.has(token)).length;
+    const score = matched / nameTokens.length;
+
+    if (score > bestScore) {
+      best = candidate.regimen;
+      bestScore = score;
+      tied = false;
+    } else if (score === bestScore && bestScore > 0) {
+      tied = true;
+    }
+  }
+
+  if (!best || tied || bestScore < REGIMEN_MATCH_THRESHOLD) return null;
+  return best;
+}

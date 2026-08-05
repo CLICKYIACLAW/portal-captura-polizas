@@ -49,17 +49,7 @@ import {
   splitName
 } from './lib/utils';
 import { findGroupNameMatches } from './lib/groupCatalog';
-import {
-  ALTA_DOCUMENT_TYPES,
-  CONSTANCIA_DOCUMENT_ID,
-  applyConstanciaReadResult,
-  applyDetectedDocumentType,
-  getConstanciaClaimStatus,
-  hasConstanciaDocument,
-  isConstanciaVerified,
-  markConstanciaReadAttempted,
-  resolveDetectedDocumentType
-} from './lib/altaDocumentTypes';
+import { applyAltaContextChange, toggleAltaGenericVendor } from './lib/altaAssignment';
 import {
   REGIMENES_FISCALES,
   formatRegimenOption,
@@ -123,12 +113,14 @@ export function emptyCapture(length = POLIZA_LAYOUT_FIELDS.length) {
   };
 }
 
-function emptyAlta() {
+export function emptyAlta() {
   return {
     tipo: 'fisica',
     linea: '',
     gerencia: '',
     vendedor: '',
+    vendedorId: '',
+    assignmentMode: 'manual',
     grupo: '',
     apP: '',
     apM: '',
@@ -850,6 +842,9 @@ function Modal({
   );
 }
 
+/** How long the "request sent" notice stays up before the modal closes itself. */
+const GROUP_REQUEST_NOTICE_MS = 1800;
+
 export function useGroupModal({
   alta,
   setAlta,
@@ -858,9 +853,15 @@ export function useGroupModal({
   createGrupo,
   openErrorModal,
   pushToast,
-  normalizeText
+  normalizeText,
+  requestNoticeMs = GROUP_REQUEST_NOTICE_MS
 }) {
-  const [groupModal, setGroupModal] = useState({ open: false, name: '', submitting: false });
+  const [groupModal, setGroupModal] = useState({
+    open: false,
+    name: '',
+    submitting: false,
+    requestSent: false
+  });
   // Tracks the vendor the in-flight request was submitted for, so a late
   // response cannot be misattributed after the user switches vendors.
   const latestVendedorRef = useRef(alta.vendedor);
@@ -871,13 +872,23 @@ export function useGroupModal({
 
   function openGroupModal() {
     submissionIdRef.current += 1;
-    setGroupModal({ open: true, name: '', submitting: false });
+    setGroupModal({ open: true, name: '', submitting: false, requestSent: false });
   }
 
   function closeGroupModal() {
     submissionIdRef.current += 1;
-    setGroupModal({ open: false, name: '', submitting: false });
+    setGroupModal({ open: false, name: '', submitting: false, requestSent: false });
   }
+
+  // Auto-closes the modal once the request confirmation has been on screen long
+  // enough to read. Owning the timer here (instead of inside the submit handler)
+  // is what lets React cancel it when the modal is closed by hand or unmounted,
+  // so a late callback can never reopen or reset a newer modal session.
+  useEffect(() => {
+    if (!groupModal.open || !groupModal.requestSent) return undefined;
+    const timer = window.setTimeout(closeGroupModal, requestNoticeMs);
+    return () => window.clearTimeout(timer);
+  }, [groupModal.open, groupModal.requestSent, requestNoticeMs]);
 
   function selectGroupSuggestion(name) {
     setAlta((current) => ({ ...current, grupo: name }));
@@ -885,6 +896,10 @@ export function useGroupModal({
   }
 
   async function createGroupFromAlta() {
+    // Belt and braces against a double fire: the button is already disabled
+    // while busy, but a second submit must never reach createGrupo.
+    if (groupModal.submitting || groupModal.requestSent) return;
+
     const grupo = normalizeText(groupModal.name);
     if (!grupo) {
       openErrorModal('Faltan datos', 'Escribe un nombre de grupo.');
@@ -924,7 +939,10 @@ export function useGroupModal({
 
       setGroupCatalog((current) => [...current, createdName]);
       setAlta((current) => ({ ...current, grupo: createdName }));
-      closeGroupModal();
+      // The request is represented as an email to the operations team, but the
+      // group is deliberately usable right away, so the alta is never blocked
+      // waiting for it. The modal stays up only to confirm the request.
+      setGroupModal((current) => ({ ...current, submitting: false, requestSent: true }));
       pushToast(`Grupo ${createdName} listo`);
     } catch (groupError) {
       if (submissionIdRef.current === submissionId) {
@@ -1012,16 +1030,17 @@ function App() {
   const [alta, setAlta] = useState(emptyAlta());
   const [altaDocumentFile, setAltaDocumentFile] = useState(null);
   const [altaConstanciaFile, setAltaConstanciaFile] = useState(null);
-  const hasVerifiedConstancia = hasConstanciaDocument(altaDocumentFile, altaConstanciaFile);
-  const generalConstanciaClaimStatus = getConstanciaClaimStatus(altaDocumentFile);
+  // Storage only: the constancia is required when factura is, and nothing more
+  // is asserted about it — no type selector, no AI verification.
+  const hasAltaConstancia = Boolean(altaConstanciaFile);
   const altaNotes = useMemo(() => buildAltaFieldNotes(alta), [alta]);
   const altaComplete = useMemo(
-    () => isAltaComplete(alta, { hasConstancia: hasVerifiedConstancia }),
-    [alta, hasVerifiedConstancia]
+    () => isAltaComplete(alta, { hasConstancia: hasAltaConstancia }),
+    [alta, hasAltaConstancia]
   );
   const altaHint = useMemo(
-    () => getAltaSaveHint(alta, { hasConstancia: hasVerifiedConstancia }),
-    [alta, hasVerifiedConstancia]
+    () => getAltaSaveHint(alta, { hasConstancia: hasAltaConstancia }),
+    [alta, hasAltaConstancia]
   );
   const altaUsoCfdiOptions = useMemo(
     () => getUsosCfdiParaRegimen(alta.regimenClave).map(formatUsoCfdiOption),
@@ -1124,6 +1143,13 @@ function App() {
     vendedoresLoading,
     genericVendor,
     assignmentMode: capture.assignmentMode
+  });
+  // Same availability rules on both tabs, so a catalogue without VG001 disables
+  // the switch identically in Captura and in Alta de asegurados.
+  const altaGenericToggleState = getGenericAssignmentToggleState({
+    vendedoresLoading,
+    genericVendor,
+    assignmentMode: alta.assignmentMode
   });
   const selectedRamoOption =
     normalizedRamoOptions.find((option) => option.value === String(capture.ramo || '')) || null;
@@ -1518,6 +1544,14 @@ function App() {
     }
   }
 
+  function handleToggleAltaAssignmentMode() {
+    // The group catalogue belongs to the previous vendor, so it is dropped the
+    // same way a manual vendor pick drops it.
+    setGroupCatalog([]);
+    setGroupsLoading(false);
+    setAlta((current) => toggleAltaGenericVendor(current, vendorOptions));
+  }
+
   function updateLayout(index, value) {
     setCapture((current) => {
       const next = [...current.layout];
@@ -1669,32 +1703,11 @@ function App() {
     }
   }
 
-  /**
-   * Guards a document read that must not be recorded as an AI attempt unless a
-   * request actually reaches the AI.
-   *
-   * The manual override that lets a user self-certify the constancia unlocks on
-   * `aiReadAttempted`. `callAnthropic` throws before dispatching anything when no
-   * API key is configured, so routing that through the normal failure path would
-   * let a user simply dismiss the key prompt and then self-certify a document the
-   * AI never looked at — defeating the verification this flow exists to enforce.
-   * Bailing out here leaves the attempt unrecorded and the override locked.
-   */
-  function ensureAnthropicKeyForVerification() {
-    if (ensureAnthropicKey()) return true;
-    openErrorModal(
-      'Falta la clave de API',
-      'Se requiere la clave de API de Anthropic para verificar el documento. Sin ella no es posible confirmar la constancia.'
-    );
-    return false;
-  }
-
   async function readAltaDocument() {
     if (!altaDocumentFile) {
       openErrorModal('Falta un archivo', 'Carga un documento del asegurado antes de pedir lectura asistida.');
       return;
     }
-    if (!ensureAnthropicKeyForVerification()) return;
 
     const file = altaDocumentFile.file;
     setReadingDocumentLabel('Leyendo documento del asegurado');
@@ -1706,42 +1719,8 @@ function App() {
         errorLabel: 'leer el documento del asegurado'
       });
       setAlta((current) => mapAltaExtraction(current, result));
-      const detectedType = resolveDetectedDocumentType(result);
-      setAltaDocumentFile((current) => {
-        if (!current || current.file !== file) return current;
-        return applyConstanciaReadResult(
-          applyDetectedDocumentType(current, detectedType),
-          file,
-          detectedType
-        );
-      });
       pushToast('Lectura completada');
     } catch (readError) {
-      setAltaDocumentFile((current) => markConstanciaReadAttempted(current, file));
-      openErrorModal('Error de lectura', readError.message || 'No se pudo completar la lectura del archivo.');
-    } finally {
-      setReadingDocument(false);
-    }
-  }
-
-  async function readAltaConstancia() {
-    if (!altaConstanciaFile) return;
-    if (!ensureAnthropicKeyForVerification()) return;
-
-    const file = altaConstanciaFile.file;
-    setReadingDocumentLabel('Leyendo constancia de situación fiscal');
-    setReadingDocument(true);
-    pushToast('Leyendo constancia de situación fiscal con Anthropic...');
-    try {
-      const result = await callAnthropic(file, {
-        prompt: buildAltaAnthropicPrompt(alta.tipo),
-        errorLabel: 'leer la constancia de situación fiscal'
-      });
-      const detectedType = resolveDetectedDocumentType(result);
-      setAltaConstanciaFile((current) => applyConstanciaReadResult(current, file, detectedType));
-      pushToast('Lectura completada');
-    } catch (readError) {
-      setAltaConstanciaFile((current) => markConstanciaReadAttempted(current, file));
       openErrorModal('Error de lectura', readError.message || 'No se pudo completar la lectura del archivo.');
     } finally {
       setReadingDocument(false);
@@ -1822,7 +1801,7 @@ function App() {
       return;
     }
 
-    if (!isAltaComplete(alta, { hasConstancia: hasVerifiedConstancia })) {
+    if (!isAltaComplete(alta, { hasConstancia: hasAltaConstancia })) {
       openErrorModal('Faltan datos', 'Completa todos los campos requeridos.');
       return;
     }
@@ -1900,9 +1879,9 @@ function App() {
             type="submit"
             form="group-modal-form"
             className="primary-button"
-            disabled={!canCreateGroup || groupModal.submitting}
+            disabled={!canCreateGroup || groupModal.submitting || groupModal.requestSent}
           >
-            {groupModal.submitting ? 'Guardando...' : 'Dar de alta grupo'}
+            {groupModal.submitting ? 'Enviando solicitud...' : 'Solicitar alta de grupo'}
           </button>
         </>
       }
@@ -1921,9 +1900,15 @@ function App() {
           type="text"
           value={groupModal.name}
           required
-          disabled={groupModal.submitting}
+          disabled={groupModal.submitting || groupModal.requestSent}
           onChange={(event) => setGroupModal((current) => ({ ...current, name: event.target.value }))}
         />
+        {groupModal.requestSent ? (
+          <p className="modal-notice" role="status">
+            Enviamos la solicitud de alta del grupo por correo. Mientras tanto, el grupo ya quedó
+            seleccionado para que continúes con el alta.
+          </p>
+        ) : null}
         {groupMatches.length ? (
           <div className="group-suggestion-list">
             <strong>Tal vez buscas este grupo</strong>
@@ -2123,28 +2108,6 @@ function App() {
             subtitle="Selecciona vendedor, asegurado y ramo para continuar"
             headAlign="left"
           >
-            <div className="read-actions">
-              <div className="assignment-toggle">
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={genericAssignmentToggleState.checked}
-                  aria-disabled={genericAssignmentToggleState.disabled}
-                  disabled={genericAssignmentToggleState.disabled}
-                  title={genericAssignmentToggleState.statusLabel || undefined}
-                  className={`toggle-switch${genericAssignmentToggleState.checked ? ' is-on' : ''}`}
-                  onClick={handleToggleAssignmentMode}
-                >
-                  <span className="toggle-switch-thumb" aria-hidden="true" />
-                </button>
-                <div className="assignment-toggle-copy">
-                  <span className="assignment-toggle-label">Vendedor genérico</span>
-                  {genericAssignmentToggleState.statusLabel ? (
-                    <span className="assignment-toggle-status">{genericAssignmentToggleState.statusLabel}</span>
-                  ) : null}
-                </div>
-              </div>
-            </div>
             <div className="combo-grid">
               {showCaptureContextCombos ? (
                 <ComboField
@@ -2175,44 +2138,64 @@ function App() {
                   }
                 />
               ) : null}
-              {capture.assignmentMode !== 'generic' ? (
-                <ComboField
-                  label="Vendedor"
-                  value={capture.vendedor}
-                  options={vendorOptions}
-                  placeholder={vendedoresLoading ? 'Cargando vendedores...' : 'Selecciona el vendedor'}
-                  hint={vendedoresLoading ? 'Cargando vendedores...' : vendorOptions.length ? `${vendorOptions.length} opciones` : 'Sin vendedores'}
-                  disabled={vendedoresLoading || !vendorOptions.length}
-                  onSelect={(value) => {
-                    const selectedVendor = vendorOptions.find(
-                      (option) => normalizeText(option.Valor ?? option.Texto ?? '') === normalizeText(value)
-                    );
+              <div className="combo-cell">
+                {capture.assignmentMode !== 'generic' ? (
+                  <ComboField
+                    label="Vendedor"
+                    value={capture.vendedor}
+                    options={vendorOptions}
+                    placeholder={vendedoresLoading ? 'Cargando vendedores...' : 'Selecciona el vendedor'}
+                    hint={vendedoresLoading ? 'Cargando vendedores...' : vendorOptions.length ? `${vendorOptions.length} opciones` : 'Sin vendedores'}
+                    disabled={vendedoresLoading || !vendorOptions.length}
+                    onSelect={(value) => {
+                      const selectedVendor = vendorOptions.find(
+                        (option) => normalizeText(option.Valor ?? option.Texto ?? '') === normalizeText(value)
+                      );
 
-                    setCapture((current) =>
-                      applyAssignmentSelection(
-                        current,
-                        'vendedor',
-                        value,
-                        {
-                          vendedorId: selectedVendor?.IdVendedor ? String(selectedVendor.IdVendedor) : '',
-                          asegurado: ''
-                        },
-                        POLIZA_LAYOUT_FIELDS.length
-                      )
-                    );
-                  }}
-                />
-              ) : (
-                <div className="combo-field">
-                  <label>Vendedor</label>
-                  <div className="generic-field-tag">
-                    <span className="pill accent">Vendedor genérico</span>
-                    {capture.vendedor ? <span className="generic-field-value">{capture.vendedor}</span> : null}
+                      setCapture((current) =>
+                        applyAssignmentSelection(
+                          current,
+                          'vendedor',
+                          value,
+                          {
+                            vendedorId: selectedVendor?.IdVendedor ? String(selectedVendor.IdVendedor) : '',
+                            asegurado: ''
+                          },
+                          POLIZA_LAYOUT_FIELDS.length
+                        )
+                      );
+                    }}
+                  />
+                ) : (
+                  <div className="combo-field">
+                    <label>Vendedor</label>
+                    <div className="generic-field-tag">
+                      <span className="pill accent">Vendedor genérico</span>
+                      {capture.vendedor ? <span className="generic-field-value">{capture.vendedor}</span> : null}
+                    </div>
                   </div>
+                )}
+                <div className="inline-toggle">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={genericAssignmentToggleState.checked}
+                    aria-disabled={genericAssignmentToggleState.disabled}
+                    disabled={genericAssignmentToggleState.disabled}
+                    title={genericAssignmentToggleState.statusLabel || undefined}
+                    className={`toggle-switch${genericAssignmentToggleState.checked ? ' is-on' : ''}`}
+                    onClick={handleToggleAssignmentMode}
+                  >
+                    <span className="toggle-switch-thumb" aria-hidden="true" />
+                  </button>
+                  <span className="inline-toggle-label">Vendedor genérico</span>
+                  {genericAssignmentToggleState.statusLabel ? (
+                    <span className="inline-toggle-status">{genericAssignmentToggleState.statusLabel}</span>
+                  ) : null}
                 </div>
-              )}
+              </div>
               {capture.assignmentMode !== 'generic' ? (
-                <>
+                <div className="combo-cell">
                   <ComboField
                     label="Asegurado"
                     value={capture.asegurado}
@@ -2240,18 +2223,18 @@ function App() {
                       )
                     }
                   />
-                  <div className="mini-field asegurado-registration">
-                    <label>Nuevo asegurado</label>
-                    <button
-                      type="button"
-                      className="secondary-button"
-                      onClick={openAseguradoModal}
-                      disabled={!selectedVendorId || aseguradosLoading}
-                    >
-                      Registrar asegurado
-                    </button>
-                  </div>
-                </>
+                  <button
+                    type="button"
+                    className="inline-action"
+                    onClick={openAseguradoModal}
+                    disabled={!selectedVendorId || aseguradosLoading}
+                  >
+                    Registrar asegurado
+                  </button>
+                  {!selectedVendorId ? (
+                    <small className="inline-action-hint">Selecciona un vendedor para poder registrarlo</small>
+                  ) : null}
+                </div>
               ) : (
                 <div className="combo-field">
                   <label>Asegurado</label>
@@ -2477,12 +2460,7 @@ function App() {
                 options={lineOptions}
                 placeholder="Selecciona la línea"
                 onSelect={(value) =>
-                  setAlta((current) => ({
-                    ...current,
-                    linea: value,
-                    gerencia: '',
-                    vendedor: ''
-                  }))
+                  setAlta((current) => applyAltaContextChange(current, { linea: value, gerencia: '' }))
                 }
               />
               <ComboField
@@ -2491,56 +2469,73 @@ function App() {
                 options={alta.linea ? catalogs.gerencias?.[alta.linea] || [] : []}
                 placeholder="Selecciona la gerencia"
                 disabled={!alta.linea}
-                onSelect={(value) =>
-                  setAlta((current) => ({
-                    ...current,
-                    gerencia: value,
-                    vendedor: ''
-                  }))
-                }
+                onSelect={(value) => setAlta((current) => applyAltaContextChange(current, { gerencia: value }))}
               />
-              <ComboField
-                label="Vendedor *"
-                value={alta.vendedor}
-                options={vendorOptions}
-                placeholder={vendedoresLoading ? 'Cargando vendedores...' : 'Selecciona el vendedor'}
-                hint={vendedoresLoading ? 'Cargando vendedores...' : vendorOptions.length ? `${vendorOptions.length} opciones` : 'Sin vendedores'}
-                disabled={vendedoresLoading || !vendorOptions.length}
-                onSelect={(value) => {
-                  const selectedVendor = vendedorCatalog.find((vendor) => {
-                    const option = getComboOption(vendor);
-                    return option.label === value || option.value === value;
-                  });
+              <div className="combo-cell">
+                <ComboField
+                  label="Vendedor *"
+                  value={alta.vendedor}
+                  options={vendorOptions}
+                  placeholder={vendedoresLoading ? 'Cargando vendedores...' : 'Selecciona el vendedor'}
+                  hint={vendedoresLoading ? 'Cargando vendedores...' : vendorOptions.length ? `${vendorOptions.length} opciones` : 'Sin vendedores'}
+                  disabled={vendedoresLoading || !vendorOptions.length}
+                  onSelect={(value) => {
+                    const selectedVendor = vendedorCatalog.find((vendor) => {
+                      const option = getComboOption(vendor);
+                      return option.label === value || option.value === value;
+                    });
 
-                  setGroupCatalog([]);
-                  setGroupsLoading(false);
-                  setAlta((current) => ({
-                    ...current,
-                    vendedor: value,
-                    grupo: '',
-                    vendedorId: selectedVendor?.IdVendedor ? String(selectedVendor.IdVendedor) : ''
-                  }));
-                }}
-              />
-              <ComboField
-                label="Grupo *"
-                value={alta.grupo}
-                options={groupCatalog}
-                placeholder={groupsLoading ? 'Cargando grupos...' : 'Selecciona un grupo'}
-                hint={groupsLoading ? 'Cargando grupos...' : groupCatalog.length ? `${groupCatalog.length} opciones` : 'Sin grupos'}
-                disabled={groupsLoading || !groupCatalog.length}
-                onSelect={(value) => setAlta((current) => ({ ...current, grupo: value }))}
-              />
-              <div className="mini-field group-registration">
-                <label>Nuevo grupo</label>
+                    setGroupCatalog([]);
+                    setGroupsLoading(false);
+                    setAlta((current) => ({
+                      ...current,
+                      assignmentMode: 'manual',
+                      vendedor: value,
+                      grupo: '',
+                      vendedorId: selectedVendor?.IdVendedor ? String(selectedVendor.IdVendedor) : ''
+                    }));
+                  }}
+                />
+                <div className="inline-toggle">
+                  <button
+                    type="button"
+                    role="switch"
+                    aria-checked={altaGenericToggleState.checked}
+                    aria-disabled={altaGenericToggleState.disabled}
+                    disabled={altaGenericToggleState.disabled}
+                    title={altaGenericToggleState.statusLabel || undefined}
+                    className={`toggle-switch${altaGenericToggleState.checked ? ' is-on' : ''}`}
+                    onClick={handleToggleAltaAssignmentMode}
+                  >
+                    <span className="toggle-switch-thumb" aria-hidden="true" />
+                  </button>
+                  <span className="inline-toggle-label">Vendedor genérico</span>
+                  {altaGenericToggleState.statusLabel ? (
+                    <span className="inline-toggle-status">{altaGenericToggleState.statusLabel}</span>
+                  ) : null}
+                </div>
+              </div>
+              <div className="combo-cell">
+                <ComboField
+                  label="Grupo *"
+                  value={alta.grupo}
+                  options={groupCatalog}
+                  placeholder={groupsLoading ? 'Cargando grupos...' : 'Selecciona un grupo'}
+                  hint={groupsLoading ? 'Cargando grupos...' : groupCatalog.length ? `${groupCatalog.length} opciones` : 'Sin grupos'}
+                  disabled={groupsLoading || !groupCatalog.length}
+                  onSelect={(value) => setAlta((current) => ({ ...current, grupo: value }))}
+                />
                 <button
                   type="button"
-                  className="secondary-button"
+                  className="inline-action"
                   onClick={openGroupModal}
                   disabled={!alta.vendedor || groupsLoading}
                 >
                   Registrar grupo
                 </button>
+                {!alta.vendedor ? (
+                  <small className="inline-action-hint">Selecciona un vendedor para poder registrarlo</small>
+                ) : null}
               </div>
             </div>
 
@@ -2581,12 +2576,7 @@ function App() {
                       name: file.name,
                       type: file.type,
                       sizeMb: (file.size / 1048576).toFixed(1),
-                      cat: 'alta-documento',
-                      docType: '',
-                      docTypeSource: '',
-                      aiDetectedType: null,
-                      aiReadAttempted: false,
-                      overrideConfirmed: false
+                      cat: 'alta-documento'
                     });
                   }}
                 />
@@ -2607,36 +2597,6 @@ function App() {
                     >
                       Quitar
                     </button>
-                  </div>
-                </div>
-              ) : null}
-              {altaDocumentFile ? (
-                <div className="ramo-grid alta-grid">
-                  <div className="mini-field">
-                    <label>
-                      <span>¿Qué documento es? {alta.requiereFactura ? <span className="required-mark">*</span> : null}</span>
-                      {altaDocumentFile.docTypeSource === 'ai' ? (
-                        <span className="pill tone-info">Detectado automáticamente</span>
-                      ) : null}
-                    </label>
-                    <select
-                      value={altaDocumentFile.docType}
-                      onChange={(event) =>
-                        setAltaDocumentFile((current) =>
-                          current ? { ...current, docType: event.target.value, docTypeSource: 'user' } : current
-                        )
-                      }
-                    >
-                      <option value="">Selecciona el tipo de documento</option>
-                      {ALTA_DOCUMENT_TYPES.map((type) => (
-                        <option key={type.id} value={type.id}>
-                          {type.label}
-                        </option>
-                      ))}
-                    </select>
-                    {altaDocumentFile.docTypeSource === 'ai' ? (
-                      <small className="field-hint">Verifica que el tipo detectado sea correcto.</small>
-                    ) : null}
                   </div>
                 </div>
               ) : null}
@@ -2770,75 +2730,31 @@ function App() {
             </div>
             {alta.requiereFactura ? (
               <div className="mini-field">
-                {hasVerifiedConstancia ? (
-                  <span className="pill tone-ok">
-                    Constancia de situación fiscal verificada mediante {isConstanciaVerified(altaDocumentFile) ? 'el documento del asegurado' : 'la carga dedicada'}
-                  </span>
-                ) : (
-                  <>
-                    {generalConstanciaClaimStatus === 'conflict' ? (
-                      <>
-                        <span className="pill tone-bad">La IA identificó un documento distinto a la constancia</span>
-                        <small className="field-hint">El documento fue marcado como constancia, pero la IA no lo confirmó. La constancia sigue siendo requerida.</small>
-                      </>
-                    ) : null}
-                    {generalConstanciaClaimStatus === 'unverified' ? (
-                      <small className="field-hint">Lee el documento del asegurado para que la IA pueda verificar la constancia.</small>
-                    ) : null}
-                    <div className="upload-card">
-                      <label>
-                        Constancia de situación fiscal <span className="required-mark">*</span>
-                      </label>
-                      <label className="dropzone">
-                        <strong>Sube la constancia de situación fiscal</strong>
-                        <small>PDF, JPG o PNG</small>
-                        <input
-                          type="file"
-                          accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
-                          onChange={(event) => {
-                            const selected = Array.from(event.target.files || []);
-                            if (!selected.length) return;
-                            const file = selected[0];
-                            setAltaConstanciaFile({
-                              file,
-                              name: file.name,
-                              type: file.type,
-                              sizeMb: (file.size / 1048576).toFixed(1),
-                              cat: 'alta-constancia',
-                              aiDetectedType: null,
-                              aiReadAttempted: false,
-                              overrideConfirmed: false
-                            });
-                          }}
-                        />
-                      </label>
-                    </div>
-                  </>
-                )}
-                {altaDocumentFile?.docType === CONSTANCIA_DOCUMENT_ID && altaDocumentFile.aiReadAttempted && !isConstanciaVerified(altaDocumentFile) ? (
-                  <label className="final-confirmation">
-                    <input
-                      type="checkbox"
-                      checked={altaDocumentFile.overrideConfirmed === true}
-                      onChange={(event) => setAltaDocumentFile((current) => (
-                        current ? { ...current, overrideConfirmed: event.target.checked } : current
-                      ))}
-                    />
-                    La IA no pudo verificar este documento. Confirmo bajo mi responsabilidad que es la constancia de situación fiscal.
+                <div className="upload-card">
+                  <label>
+                    Constancia de situación fiscal <span className="required-mark">*</span>
                   </label>
-                ) : null}
-                {altaConstanciaFile && altaConstanciaFile.aiReadAttempted && !isConstanciaVerified(altaConstanciaFile) ? (
-                  <label className="final-confirmation">
+                  <label className="dropzone">
+                    <strong>Sube la constancia de situación fiscal</strong>
+                    <small>PDF, JPG o PNG · se guarda con el expediente</small>
                     <input
-                      type="checkbox"
-                      checked={altaConstanciaFile.overrideConfirmed === true}
-                      onChange={(event) => setAltaConstanciaFile((current) => (
-                        current ? { ...current, overrideConfirmed: event.target.checked } : current
-                      ))}
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"
+                      onChange={(event) => {
+                        const selected = Array.from(event.target.files || []);
+                        if (!selected.length) return;
+                        const file = selected[0];
+                        setAltaConstanciaFile({
+                          file,
+                          name: file.name,
+                          type: file.type,
+                          sizeMb: (file.size / 1048576).toFixed(1),
+                          cat: 'alta-constancia'
+                        });
+                      }}
                     />
-                    La IA no pudo verificar este documento. Confirmo bajo mi responsabilidad que es la constancia de situación fiscal.
                   </label>
-                ) : null}
+                </div>
                 {altaConstanciaFile ? (
                   <div className="upload-files">
                     <div className="upload-file">
@@ -2848,14 +2764,6 @@ function App() {
                           {altaConstanciaFile.cat.toUpperCase()} · {altaConstanciaFile.sizeMb} MB · {altaConstanciaFile.type || 'archivo'}
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        className="primary-button"
-                        onClick={readAltaConstancia}
-                        disabled={readingDocument || !altaConstanciaFile}
-                      >
-                        {readingDocument && readingDocumentLabel === 'Leyendo constancia de situación fiscal' ? 'Leyendo...' : 'Leer documento'}
-                      </button>
                       <button
                         type="button"
                         className="ghost-button danger"
