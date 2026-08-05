@@ -224,7 +224,9 @@ describe('§6 — the group modal represents an email request', () => {
   it('shows the sent notice inside the modal and blocks a second submission', async () => {
     const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
     const modalStart = appSource.indexOf('const groupModalNode = (');
-    const modal = appSource.slice(modalStart, appSource.indexOf('const aseguradoModalNode = (', modalStart));
+    const modalEnd = appSource.indexOf('const errorModalNode = ', modalStart);
+    assert.ok(modalEnd !== -1, 'expected the group modal to be bounded by the error modal');
+    const modal = appSource.slice(modalStart, modalEnd);
 
     assert.match(modal, /groupModal\.requestSent/, 'expected the modal to render a sent notice');
     assert.match(modal, /className="modal-notice"/);

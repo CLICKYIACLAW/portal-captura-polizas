@@ -18,6 +18,7 @@ import {
   returnAltaToManualVendor,
   toggleAltaGenericVendor
 } from '../src/lib/altaAssignment.js';
+import { splitName } from '../src/lib/utils.js';
 import { emptyAlta, getGenericAssignmentToggleState } from '../src/App.jsx';
 
 const genericVendor = mapBiVendorOption({ Clave: 'VG001', Nombre: 'Vendedor Genérico', IdVendedor: 99 });
@@ -243,9 +244,12 @@ describe('§1/§2/§3 — the three actions live inside their combo cell', () =>
     const capturaAsegurado = sliceComboCells(await readAppSource())[1];
     assert.match(capturaAsegurado, /label="Asegurado"/);
     assert.match(capturaAsegurado, /className="inline-action"/);
-    assert.match(capturaAsegurado, /onClick=\{openAseguradoModal\}/);
+    assert.match(capturaAsegurado, /onClick=\{\(\) => openAltaFromCapture\(''\)\}/);
     assert.match(capturaAsegurado, />\s*Registrar asegurado\s*</);
     assert.match(capturaAsegurado, /disabled=\{!selectedVendorId \|\| aseguradosLoading\}/);
+    // The combo itself stays selection-only: registering never happens from the
+    // search query, only from the discreet action next to it.
+    assert.doesNotMatch(capturaAsegurado, /actionLabel|onAction/);
   });
 
   it('puts the Vendedor genérico switch inside the Alta vendedor cell too', async () => {
@@ -344,14 +348,23 @@ describe('§2 — the capture → alta → capture round trip survives', () => {
     // vendor that was there *before* the import.
     assert.match(
       body,
-      /importCaptureAssignment\(\s*\{[\s\S]*?\},\s*captureContext,\s*vendorOptions\s*\)/,
-      'expected the imported assignment to be reconciled against the vendor catalogue'
+      /importCaptureAssignment\(emptyAlta\(\), captureContext, vendorOptions\)/,
+      'expected a blank alta to be seeded with the reconciled capture assignment'
     );
     assert.doesNotMatch(
       body,
       /\.\.\.captureContext\s*\}\)/,
       'expected the capture context to go through the reconciling helper, not a raw spread'
     );
+    // Spreading the alta already on screen over emptyAlta() silently defeats the
+    // reset: `current` carries every key emptyAlta() produces, so the previous
+    // asegurado's RFC, CURP, domicilio and fiscal data all survive it.
+    assert.doesNotMatch(
+      body,
+      /\.\.\.emptyAlta\(\)/,
+      'expected emptyAlta() to be the seed itself, not a base some stale state is spread over'
+    );
+    assert.doesNotMatch(body, /setAlta\(\(current\)/, 'expected the seed not to read the previous alta at all');
   });
 
   it('saveAlta returns to Captura writing the new name into capture.asegurado', async () => {
@@ -363,8 +376,34 @@ describe('§2 — the capture → alta → capture round trip survives', () => {
     assert.match(body, /if \(altaReturnToCapture\) \{[\s\S]*?asegurado:\s*nombre[\s\S]*?setActiveTab\('captura'\)[\s\S]*?setAltaReturnToCapture\(false\)/);
   });
 
-  it('still opens the alta from the asegurado modal, not straight from the combo', async () => {
+  it('starts the round trip straight from the discreet action, with no intermediate modal', async () => {
     const appSource = await readAppSource();
-    assert.match(appSource, /function registerAseguradoFromCapture\(\)[\s\S]*?openAltaFromCapture\(name\)/);
+    const capturaAsegurado = sliceComboCells(appSource)[1];
+
+    assert.match(capturaAsegurado, /onClick=\{\(\) => openAltaFromCapture\(''\)\}/);
+
+    // The insured modal is gone for good: no hook, no state, no node, no
+    // handlers. If any of these come back the direct navigation has regressed.
+    assert.doesNotMatch(appSource, /aseguradoModal/i, 'expected no insured-modal state or node left');
+    assert.doesNotMatch(appSource, /asegurado-modal/, 'expected no insured-modal markup left');
+    assert.doesNotMatch(appSource, /registerAseguradoFromCapture/);
+    assert.doesNotMatch(appSource, /selectAseguradoSuggestion/);
+    assert.doesNotMatch(appSource, /canRegisterAsegurado/);
+  });
+
+  it('navigating with an empty name leaves the alta identity fields blank', async () => {
+    // The discreet action has no name to hand over — the insured is typed in
+    // the Alta form — so setCaptureStateFromGroup('') must take the branch that
+    // simply blanks razón/apellidos/nombres instead of splitting a full name.
+    assert.deepEqual(splitName(''), []);
+
+    const appSource = await readAppSource();
+    const start = appSource.indexOf('function setCaptureStateFromGroup(');
+    assert.ok(start !== -1, 'expected setCaptureStateFromGroup');
+    const body = appSource.slice(start, appSource.indexOf('\n  }', start));
+
+    assert.match(body, /const parts = splitName\(name\);/);
+    assert.match(body, /if \(parts\.length >= 3\)/);
+    assert.match(body, /razon: name,\s*apP: '',\s*apM: '',\s*nombres: ''/);
   });
 });
