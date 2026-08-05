@@ -1,5 +1,6 @@
 import { resolveMexicanAddressFromPostalCode } from './cpPrefixEstado.js';
 import { validateRfc } from './rfc.js';
+import { findClosestRegimen, formatRegimenOption } from './satCatalog.js';
 
 export function normalizeAssignmentValue(value) {
   return value == null ? '' : String(value).trim();
@@ -367,15 +368,11 @@ export function buildAltaAnthropicPrompt(tipo) {
     '{',
     '  "alta": {',
     keysList,
-    '  },',
-    '  "documento": {',
-    '    "tipo": "constancia" | "rfc" | "domicilio" | "ine" | null',
     '  }',
     '}',
     'Usa exactamente las claves técnicas indicadas como claves JSON; no inventes claves.',
     'Si el documento no muestra un campo, omítelo o usa null.',
     'Nunca devuelvas un arreglo posicional; usa siempre el objeto con claves.',
-    'Clasifica el documento en la clave "documento.tipo". Solo usa una de estas cuatro opciones: "constancia", "rfc", "domicilio" o "ine". Si no puedes identificar el documento con confianza, usa null; no adivines.',
     'Devuelve los datos listos para llenar el alta.'
   ].join('\n');
 }
@@ -395,6 +392,10 @@ export function mapAltaExtraction(current, result) {
 
   for (const key of ALTA_EXTRACTABLE_KEYS) {
     if (!isEmptyAltaValue(base[key])) continue;
+
+    // The régimen is a catalogue value, not free text: once the user has picked
+    // one, the clave is what holds the choice, so never overwrite it.
+    if (key === 'regimen' && !isEmptyAltaValue(base.regimenClave)) continue;
 
     let value = source[key];
     if (value === null || value === undefined) continue;
@@ -416,6 +417,16 @@ export function mapAltaExtraction(current, result) {
 
   if (filledKeys.has('estado')) {
     base.estadoDerivado = false;
+  }
+
+  // `alta.regimen` must hold a catalogue option, never the AI's free text: the
+  // combo below it only accepts "<clave> - <nombre>" and `regimenClave` is what
+  // the completeness gate and the Uso de CFDI list read. Text that cannot be
+  // resolved with confidence is dropped rather than stored unusable.
+  if (filledKeys.has('regimen')) {
+    const matched = findClosestRegimen(base.regimen);
+    base.regimen = matched ? formatRegimenOption(matched) : '';
+    base.regimenClave = matched ? matched.clave : '';
   }
 
   base.tipo = current.tipo;

@@ -207,10 +207,37 @@ describe('guided group UI', () => {
     assert.match(openAction, />\s*Registrar grupo\s*</);
     assert.match(createAction, /type="submit"/);
     assert.match(createAction, /form="group-modal-form"/);
-    assert.match(createAction, /\{groupModal\.submitting \? 'Guardando\.\.\.' : 'Dar de alta grupo'\}/);
+    assert.match(createAction, /\{groupModal\.submitting \? 'Enviando solicitud\.\.\.' : 'Solicitar alta de grupo'\}/);
     assert.doesNotMatch(createAction, /Registrar grupo/);
     assert.match(appSource, /Tal vez buscas este grupo/);
     assert.match(appSource, /titleId="group-modal-title"/);
+  });
+});
+
+describe('§6 — the group modal represents an email request', () => {
+  it('labels the submit action as a request and drops the direct-creation wording', async () => {
+    const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
+    assert.match(appSource, /Solicitar alta de grupo/);
+    assert.doesNotMatch(appSource, /Dar de alta grupo/);
+  });
+
+  it('shows the sent notice inside the modal and blocks a second submission', async () => {
+    const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
+    const modalStart = appSource.indexOf('const groupModalNode = (');
+    const modal = appSource.slice(modalStart, appSource.indexOf('const aseguradoModalNode = (', modalStart));
+
+    assert.match(modal, /groupModal\.requestSent/, 'expected the modal to render a sent notice');
+    assert.match(modal, /className="modal-notice"/);
+    assert.match(modal, /solicitud/i);
+    assert.match(modal, /disabled=\{!canCreateGroup \|\| groupModal\.submitting \|\| groupModal\.requestSent\}/);
+  });
+
+  it('adds no network call for the mail: only the existing createGrupo runs', async () => {
+    const appSource = await readFile(new URL('../src/App.jsx', import.meta.url), 'utf8');
+    const start = appSource.indexOf('async function createGroupFromAlta()');
+    const body = appSource.slice(start, appSource.indexOf('\n  }', start));
+    assert.doesNotMatch(body, /fetch\(|sendMail|mailto:/);
+    assert.match(body, /await createGrupo\(\{/);
   });
 });
 
@@ -218,7 +245,7 @@ describe('useGroupModal', () => {
   let captured;
   let mocks;
 
-  function Harness({ initialAlta = {}, initialCatalog = [] }) {
+  function Harness({ initialAlta = {}, initialCatalog = [], requestNoticeMs }) {
     const [alta, setAlta] = useState({ linea: '', gerencia: '', vendedor: '', grupo: '', ...initialAlta });
     const [groupCatalog, setGroupCatalog] = useState(initialCatalog);
     mocks.createGrupoCalls ||= [];
@@ -243,7 +270,8 @@ describe('useGroupModal', () => {
       createGrupo: mocks.createGrupo,
       openErrorModal: mocks.openErrorModal,
       pushToast: mocks.pushToast,
-      normalizeText: utilsModule?.normalizeText
+      normalizeText: utilsModule?.normalizeText,
+      ...(requestNoticeMs === undefined ? {} : { requestNoticeMs })
     });
     captured = { ...result, alta, groupCatalog, setAlta };
     return createElement('div', null, JSON.stringify({ groupModal: result.groupModal, alta }));
@@ -262,7 +290,7 @@ describe('useGroupModal', () => {
     await act(() => r.render(createElement(Harness)));
     assert.equal(captured.groupModal.open, false);
     await act(() => captured.openGroupModal());
-    assert.deepEqual(captured.groupModal, { open: true, name: '', submitting: false });
+    assert.deepEqual(captured.groupModal, { open: true, name: '', submitting: false, requestSent: false });
   });
 
   it('closeGroupModal sets open to false', async () => {
@@ -286,14 +314,15 @@ describe('useGroupModal', () => {
     assert.equal(mocks.createGrupoCalls.length, 0);
   });
 
-  it('createGroupFromAlta creates when no match exists', async () => {
+  it('createGroupFromAlta confirms the request in the modal, then closes it, leaving the group usable', async () => {
     const container = global.document.createElement('div');
     const r = createRoot(container);
     await act(() =>
       r.render(
         createElement(Harness, {
           initialAlta: { linea: 'Autos', gerencia: 'Norte', vendedor: 'V1' },
-          initialCatalog: ['Existente']
+          initialCatalog: ['Existente'],
+          requestNoticeMs: 10
         })
       )
     );
@@ -303,8 +332,13 @@ describe('useGroupModal', () => {
     await act(async () => {
       await captured.createGroupFromAlta();
     });
-    assert.equal(captured.groupModal.open, false);
+
+    // The modal stays open just long enough to show the "request sent" notice.
+    assert.equal(captured.groupModal.open, true);
+    assert.equal(captured.groupModal.requestSent, true);
     assert.equal(captured.groupModal.submitting, false);
+
+    // The group is usable immediately, exactly as before.
     assert.equal(captured.alta.grupo, 'Nuevo grupo');
     assert.ok(captured.groupCatalog.includes('Nuevo grupo'));
     assert.equal(mocks.toastCalls.length, 1);
@@ -315,6 +349,43 @@ describe('useGroupModal', () => {
       gerencia: 'Norte',
       vendedor: 'V1'
     });
+
+    await act(async () => {
+      await new Promise((resolve) => globalThis.setTimeout(resolve, 40));
+    });
+    assert.equal(captured.groupModal.open, false);
+    assert.equal(captured.groupModal.requestSent, false);
+
+    await act(() => r.unmount());
+  });
+
+  it('cancels the pending auto-close when the modal is closed by hand', async () => {
+    const container = global.document.createElement('div');
+    const r = createRoot(container);
+    await act(() =>
+      r.render(
+        createElement(Harness, {
+          initialAlta: { linea: 'Autos', gerencia: 'Norte', vendedor: 'V1' },
+          initialCatalog: [],
+          requestNoticeMs: 10
+        })
+      )
+    );
+    await act(() => captured.openGroupModal());
+    await act(() => captured.setGroupModal((current) => ({ ...current, name: 'Nuevo grupo' })));
+    await act(async () => {
+      await captured.createGroupFromAlta();
+    });
+    await act(() => captured.closeGroupModal());
+    assert.equal(captured.groupModal.open, false);
+    assert.equal(captured.groupModal.requestSent, false);
+
+    await act(async () => {
+      await new Promise((resolve) => globalThis.setTimeout(resolve, 40));
+    });
+    assert.equal(captured.groupModal.open, false);
+
+    await act(() => r.unmount());
   });
 
   it('createGroupFromAlta returns early when a match exists', async () => {

@@ -6,6 +6,7 @@ import {
   USOS_CFDI,
   formatRegimenOption,
   formatUsoCfdiOption,
+  findClosestRegimen,
   findRegimenByClave,
   getUsosCfdiParaRegimen
 } from '../src/lib/satCatalog.js';
@@ -14,7 +15,8 @@ import {
   getAltaMissingKeys,
   getAltaInvalidKeys,
   isAltaComplete,
-  getAltaSaveHint
+  getAltaSaveHint,
+  mapAltaExtraction
 } from '../src/lib/utils.js';
 import { selectAltaRegimen } from '../src/App.jsx';
 
@@ -101,6 +103,129 @@ describe('PR D — SAT fiscal catalogs', () => {
       assert.ok(claves.includes('626'));
       assert.ok(!claves.includes('999'));
     });
+  });
+});
+
+describe('§5 — findClosestRegimen resolves free text to a catalogue entry', () => {
+  describe('rule 1 — an explicit three-digit clave wins', () => {
+    it('accepts a bare clave', () => {
+      assert.equal(findClosestRegimen('626')?.clave, '626');
+      assert.equal(findClosestRegimen('601')?.clave, '601');
+    });
+
+    it('accepts a clave embedded in the usual SAT rendering', () => {
+      assert.equal(findClosestRegimen('626 - Régimen Simplificado de Confianza')?.clave, '626');
+      assert.equal(findClosestRegimen('Régimen fiscal: 605 Sueldos y salarios')?.clave, '605');
+    });
+
+    it('ignores three-digit numbers that are not claves', () => {
+      assert.equal(findClosestRegimen('123'), null);
+      assert.equal(findClosestRegimen('Calle 5 de Mayo 123, Col. Centro'), null);
+    });
+  });
+
+  describe('rule 2 — name matching', () => {
+    it('matches the exact catalogue name, accent and case insensitively', () => {
+      assert.equal(findClosestRegimen('Régimen Simplificado de Confianza')?.clave, '626');
+      assert.equal(findClosestRegimen('regimen simplificado de confianza')?.clave, '626');
+      assert.equal(findClosestRegimen('  REGIMEN   SIMPLIFICADO  DE CONFIANZA  ')?.clave, '626');
+      assert.equal(findClosestRegimen('Arrendamiento')?.clave, '606');
+    });
+
+    it('matches when the catalogue name is contained in the text', () => {
+      assert.equal(findClosestRegimen('Régimen de Incorporación Fiscal')?.clave, '621');
+      assert.equal(findClosestRegimen('Contribuyente en Arrendamiento de inmuebles')?.clave, '606');
+    });
+
+    it('matches when the text is contained in the catalogue name', () => {
+      assert.equal(findClosestRegimen('Sueldos y Salarios')?.clave, '605');
+      assert.equal(findClosestRegimen('Actividades Empresariales y Profesionales')?.clave, '612');
+    });
+
+    it('falls back to token overlap above the confidence threshold', () => {
+      assert.equal(findClosestRegimen('Personas Morales con Fines Lucrativos no')?.clave, '603');
+      assert.equal(findClosestRegimen('Opcional Grupos Sociedades')?.clave, '623');
+    });
+  });
+
+  describe('rule 3 — never guess when uncertain', () => {
+    it('returns null for unrelated text', () => {
+      assert.equal(findClosestRegimen('Ciudad de México'), null);
+      assert.equal(findClosestRegimen('Servicios de consultoría en informática'), null);
+      assert.equal(findClosestRegimen('GODE561231GR8'), null);
+    });
+
+    it('returns null when only filler or a single weak token overlaps', () => {
+      assert.equal(findClosestRegimen('de la los por con'), null);
+      assert.equal(findClosestRegimen('ingresos'), null);
+      assert.equal(findClosestRegimen('régimen'), null);
+    });
+
+    it('returns null for empty, blank and non-string input', () => {
+      assert.equal(findClosestRegimen(''), null);
+      assert.equal(findClosestRegimen('   '), null);
+      assert.equal(findClosestRegimen(null), null);
+      assert.equal(findClosestRegimen(undefined), null);
+      assert.equal(findClosestRegimen({}), null);
+      assert.equal(findClosestRegimen([]), null);
+    });
+  });
+
+  it('always returns a real catalogue entry', () => {
+    const match = findClosestRegimen('Régimen Simplificado de Confianza');
+    assert.ok(REGIMENES_FISCALES.includes(match));
+  });
+});
+
+describe('§5 — mapAltaExtraction resolves the extracted régimen', () => {
+  function extractionBase(overrides = {}) {
+    return { tipo: 'fisica', regimen: '', regimenClave: '', giro: '', ...overrides };
+  }
+
+  it('writes the canonical display string and the clave', () => {
+    const next = mapAltaExtraction(extractionBase(), {
+      alta: { regimen: 'Régimen Simplificado de Confianza' }
+    });
+    assert.equal(next.regimen, '626 - Régimen Simplificado de Confianza');
+    assert.equal(next.regimenClave, '626');
+  });
+
+  it('resolves a clave-prefixed extraction to the same canonical pair', () => {
+    const next = mapAltaExtraction(extractionBase(), { alta: { regimen: '601' } });
+    assert.equal(next.regimen, '601 - General de Ley Personas Morales');
+    assert.equal(next.regimenClave, '601');
+  });
+
+  it('leaves both fields empty rather than storing unusable free text', () => {
+    const next = mapAltaExtraction(extractionBase(), {
+      alta: { regimen: 'no se pudo determinar', giro: 'Comercio' }
+    });
+    assert.equal(next.regimen, '');
+    assert.equal(next.regimenClave, '');
+    assert.equal(next.giro, 'Comercio');
+  });
+
+  it('never overwrites a régimen the user already picked', () => {
+    const current = extractionBase({
+      regimen: '605 - Sueldos y Salarios e Ingresos Asimilados a Salarios',
+      regimenClave: '605'
+    });
+    const next = mapAltaExtraction(current, { alta: { regimen: 'Arrendamiento' } });
+    assert.equal(next.regimen, '605 - Sueldos y Salarios e Ingresos Asimilados a Salarios');
+    assert.equal(next.regimenClave, '605');
+  });
+
+  it('never overwrites a clave the user already picked, even with an empty display', () => {
+    const current = extractionBase({ regimen: '', regimenClave: '626' });
+    const next = mapAltaExtraction(current, { alta: { regimen: 'Arrendamiento' } });
+    assert.equal(next.regimenClave, '626');
+    assert.equal(next.regimen, '');
+  });
+
+  it('leaves the régimen untouched when the extraction has none', () => {
+    const next = mapAltaExtraction(extractionBase(), { alta: { giro: 'Comercio' } });
+    assert.equal(next.regimen, '');
+    assert.equal(next.regimenClave, '');
   });
 });
 
