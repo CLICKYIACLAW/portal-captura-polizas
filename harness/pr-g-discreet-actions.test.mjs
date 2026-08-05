@@ -14,6 +14,7 @@ import { mapBiVendorOption } from '../src/lib/api.js';
 import {
   activateAltaGenericVendor,
   applyAltaContextChange,
+  importCaptureAssignment,
   returnAltaToManualVendor,
   toggleAltaGenericVendor
 } from '../src/lib/altaAssignment.js';
@@ -137,6 +138,92 @@ describe('§1 — Alta generic vendor state helper', () => {
   });
 });
 
+/**
+ * The capture context only carries the vendor's display value, so the alta's
+ * `assignmentMode`/`vendedorId` — which describe a *different* vendor until the
+ * import happens — have to be re-derived from the vendor actually being
+ * imported. Left alone, the alta renders the generic switch ON behind an
+ * unrelated manual vendor, and one click on it wipes the imported vendor.
+ */
+describe('§2 — importCaptureAssignment reconciles the imported assignment', () => {
+  const vendors = [otherVendor, genericVendor];
+
+  it('drops generic mode when the imported vendor is a manual one, keeping that vendor', () => {
+    const current = {
+      ...emptyAlta(),
+      assignmentMode: 'generic',
+      vendedor: genericVendor.Valor,
+      vendedorId: '99'
+    };
+    const next = importCaptureAssignment(current, { linea: 'L', gerencia: 'G', vendedor: otherVendor.Valor }, vendors);
+
+    assert.equal(next.assignmentMode, 'manual');
+    assert.equal(next.vendedor, otherVendor.Valor);
+    assert.equal(next.vendedorId, '7');
+  });
+
+  it('turns generic mode on when the imported vendor is VG001', () => {
+    const current = { ...emptyAlta(), vendedor: otherVendor.Valor, vendedorId: '7' };
+    const next = importCaptureAssignment(current, { linea: 'L', gerencia: 'G', vendedor: genericVendor.Valor }, vendors);
+
+    assert.equal(next.assignmentMode, 'generic');
+    assert.equal(next.vendedor, genericVendor.Valor);
+    assert.equal(next.vendedorId, '99');
+  });
+
+  it('leaves no stale mode or id behind when the capture has no vendor yet', () => {
+    const current = {
+      ...emptyAlta(),
+      assignmentMode: 'generic',
+      vendedor: genericVendor.Valor,
+      vendedorId: '99'
+    };
+    const next = importCaptureAssignment(current, { linea: 'L', gerencia: '', vendedor: '' }, vendors);
+
+    assert.equal(next.assignmentMode, 'manual');
+    assert.equal(next.vendedor, '');
+    assert.equal(next.vendedorId, '');
+  });
+
+  it('clears the id when the imported vendor is not in the catalogue', () => {
+    const current = { ...emptyAlta(), assignmentMode: 'generic', vendedor: genericVendor.Valor, vendedorId: '99' };
+    const next = importCaptureAssignment(current, { linea: '', gerencia: '', vendedor: 'VG404 - Fuera' }, vendors);
+
+    assert.equal(next.assignmentMode, 'manual');
+    assert.equal(next.vendedor, 'VG404 - Fuera');
+    assert.equal(next.vendedorId, '');
+  });
+
+  it('never reports generic mode while some other vendor sits in the field', () => {
+    const modes = ['manual', 'generic'];
+    const imported = ['', otherVendor.Valor, genericVendor.Valor, 'VG404 - Fuera'];
+
+    for (const assignmentMode of modes) {
+      for (const vendedor of imported) {
+        const next = importCaptureAssignment(
+          { ...emptyAlta(), assignmentMode, vendedor: genericVendor.Valor, vendedorId: '99' },
+          { linea: 'L', gerencia: 'G', vendedor },
+          vendors
+        );
+        assert.equal(
+          next.assignmentMode === 'generic',
+          next.vendedor === genericVendor.Valor,
+          `generic mode must track the imported vendor, got ${next.assignmentMode} for "${vendedor}"`
+        );
+      }
+    }
+  });
+
+  it('carries the rest of the capture context and leaves unrelated alta fields alone', () => {
+    const current = { ...emptyAlta(), email: 'a@b.co', linea: 'Vieja', gerencia: 'Vieja' };
+    const next = importCaptureAssignment(current, { linea: 'Nueva', gerencia: 'Otra', vendedor: '' }, vendors);
+
+    assert.equal(next.linea, 'Nueva');
+    assert.equal(next.gerencia, 'Otra');
+    assert.equal(next.email, 'a@b.co');
+  });
+});
+
 describe('§1/§2/§3 — the three actions live inside their combo cell', () => {
   it('wraps exactly the four cells that own a discreet action', async () => {
     const cells = sliceComboCells(await readAppSource());
@@ -146,8 +233,9 @@ describe('§1/§2/§3 — the three actions live inside their combo cell', () =>
   it('puts the Vendedor genérico switch inside the Captura vendedor cell', async () => {
     const [capturaVendedor] = sliceComboCells(await readAppSource());
     assert.match(capturaVendedor, /label="Vendedor"/);
-    assert.match(capturaVendedor, /role="switch"/);
-    assert.match(capturaVendedor, /onClick=\{handleToggleAssignmentMode\}/);
+    assert.match(capturaVendedor, /<InlineGenericVendorToggle/);
+    assert.match(capturaVendedor, /state=\{genericAssignmentToggleState\}/);
+    assert.match(capturaVendedor, /onToggle=\{handleToggleAssignmentMode\}/);
     assert.match(capturaVendedor, /Vendedor genérico/);
   });
 
@@ -163,8 +251,9 @@ describe('§1/§2/§3 — the three actions live inside their combo cell', () =>
   it('puts the Vendedor genérico switch inside the Alta vendedor cell too', async () => {
     const altaVendedor = sliceComboCells(await readAppSource())[2];
     assert.match(altaVendedor, /label="Vendedor \*"/);
-    assert.match(altaVendedor, /role="switch"/);
-    assert.match(altaVendedor, /onClick=\{handleToggleAltaAssignmentMode\}/);
+    assert.match(altaVendedor, /<InlineGenericVendorToggle/);
+    assert.match(altaVendedor, /state=\{altaGenericToggleState\}/);
+    assert.match(altaVendedor, /onToggle=\{handleToggleAltaAssignmentMode\}/);
     assert.match(altaVendedor, /Vendedor genérico/);
   });
 
@@ -177,13 +266,29 @@ describe('§1/§2/§3 — the three actions live inside their combo cell', () =>
     assert.match(altaGrupo, /disabled=\{!alta\.vendedor \|\| groupsLoading\}/);
   });
 
-  it('keeps both switches accessible', async () => {
+  it('keeps both switches accessible from a single shared toggle component', async () => {
     const appSource = await readAppSource();
-    const switches = appSource.match(/role="switch"/g) || [];
-    assert.equal(switches.length, 2, 'expected one switch per tab');
-    assert.equal((appSource.match(/aria-checked=/g) || []).length, 2);
-    assert.equal((appSource.match(/aria-disabled=/g) || []).length, 2);
-    assert.equal((appSource.match(/toggle-switch-thumb/g) || []).length, 2);
+    const start = appSource.indexOf('function InlineGenericVendorToggle(');
+    assert.ok(start !== -1, 'expected one shared inline-toggle component');
+    const component = appSource.slice(start, appSource.indexOf('\n}\n', start));
+
+    // The accessible switch is declared exactly once...
+    assert.equal((appSource.match(/role="switch"/g) || []).length, 1, 'expected a single switch declaration');
+    assert.equal((appSource.match(/aria-checked=/g) || []).length, 1);
+    assert.equal((appSource.match(/aria-disabled=/g) || []).length, 1);
+    assert.equal((appSource.match(/toggle-switch-thumb/g) || []).length, 1);
+    assert.match(component, /role="switch"/);
+    assert.match(component, /aria-checked=\{state\.checked\}/);
+    assert.match(component, /aria-disabled=\{state\.disabled\}/);
+    assert.match(component, /disabled=\{state\.disabled\}/);
+    assert.match(component, /title=\{state\.statusLabel \|\| undefined\}/);
+    assert.match(component, /toggle-switch\$\{state\.checked \? ' is-on' : ''\}/);
+    assert.match(component, /<span className="toggle-switch-thumb" aria-hidden="true" \/>/);
+    assert.match(component, /className="inline-toggle-label">\{label\}</);
+    assert.match(component, /state\.statusLabel \?[\s\S]*?inline-toggle-status/);
+
+    // ...and mounted once per tab.
+    assert.equal((appSource.match(/<InlineGenericVendorToggle/g) || []).length, 2, 'expected one toggle per tab');
   });
 
   it('drops the prominent blocks the discreet actions replace', async () => {
@@ -234,6 +339,19 @@ describe('§2 — the capture → alta → capture round trip survives', () => {
     assert.match(body, /vendedor:\s*capture\.vendedor/);
     assert.match(body, /setAltaReturnToCapture\(true\)/);
     assert.match(body, /setActiveTab\('asegurados'\)/);
+
+    // The context alone would leave assignmentMode/vendedorId describing the
+    // vendor that was there *before* the import.
+    assert.match(
+      body,
+      /importCaptureAssignment\(\s*\{[\s\S]*?\},\s*captureContext,\s*vendorOptions\s*\)/,
+      'expected the imported assignment to be reconciled against the vendor catalogue'
+    );
+    assert.doesNotMatch(
+      body,
+      /\.\.\.captureContext\s*\}\)/,
+      'expected the capture context to go through the reconciling helper, not a raw spread'
+    );
   });
 
   it('saveAlta returns to Captura writing the new name into capture.asegurado', async () => {

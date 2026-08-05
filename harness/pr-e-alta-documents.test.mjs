@@ -149,6 +149,28 @@ describe('§4 — the dedicated constancia upload is storage only', () => {
     assert.doesNotMatch(block, /final-confirmation/, 'the constancia must not offer a manual override');
   });
 
+  it('does not promise a persistence the payload never performs', async () => {
+    const appSource = await readAppSource();
+    const start = appSource.indexOf('{alta.requiereFactura ? (');
+    const block = appSource.slice(start, appSource.indexOf('<div className="ramo-grid alta-grid">', start));
+
+    // saveAlta/createAsegurado send JSON fields only — no attachment ever
+    // leaves the browser — so the caption must not claim the file is filed.
+    assert.doesNotMatch(block, /se guarda con el expediente/, 'the constancia is never sent to the backend');
+    assert.doesNotMatch(block, /se guarda|se almacena|se archiva|queda guardad/i, 'the caption must not claim storage');
+
+    // The required marker and the upload itself stay exactly as they are.
+    assert.match(block, /Constancia de situación fiscal <span className="required-mark">\*<\/span>/);
+    assert.match(block, /<input\s+type="file"/);
+    assert.match(block, /PDF, JPG o PNG/);
+    assert.match(block, /IA no lo/, 'the caption should say the AI does not read this one');
+  });
+
+  it('leaves the general upload caption alone', async () => {
+    const appSource = await readAppSource();
+    assert.match(appSource, /PDF, JPG o PNG · la IA llena el formulario y tú lo complementas/);
+  });
+
   it('stores nothing but the file metadata', async () => {
     const appSource = await readAppSource();
     assert.match(

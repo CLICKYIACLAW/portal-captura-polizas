@@ -49,7 +49,7 @@ import {
   splitName
 } from './lib/utils';
 import { findGroupNameMatches } from './lib/groupCatalog';
-import { applyAltaContextChange, toggleAltaGenericVendor } from './lib/altaAssignment';
+import { applyAltaContextChange, importCaptureAssignment, toggleAltaGenericVendor } from './lib/altaAssignment';
 import {
   REGIMENES_FISCALES,
   formatRegimenOption,
@@ -408,6 +408,33 @@ function ComboField({
         ) : null}
       </div>
       {hint ? <small className="field-hint">{hint}</small> : null}
+    </div>
+  );
+}
+
+/**
+ * The discreet switch that sits under a Vendedor combo. Captura and Alta run
+ * the same markup off their own toggle state and handler, so it lives here
+ * once — a divergence between the two would be an accessibility bug on one tab
+ * only, which is exactly the kind of drift a duplicated block invites.
+ */
+function InlineGenericVendorToggle({ state, label, onToggle }) {
+  return (
+    <div className="inline-toggle">
+      <button
+        type="button"
+        role="switch"
+        aria-checked={state.checked}
+        aria-disabled={state.disabled}
+        disabled={state.disabled}
+        title={state.statusLabel || undefined}
+        className={`toggle-switch${state.checked ? ' is-on' : ''}`}
+        onClick={onToggle}
+      >
+        <span className="toggle-switch-thumb" aria-hidden="true" />
+      </button>
+      <span className="inline-toggle-label">{label}</span>
+      {state.statusLabel ? <span className="inline-toggle-status">{state.statusLabel}</span> : null}
     </div>
   );
 }
@@ -1625,11 +1652,9 @@ function App() {
       gerencia: capture.gerencia,
       vendedor: capture.vendedor
     };
-    setAlta((current) => ({
-      ...emptyAlta(),
-      ...current,
-      ...captureContext
-    }));
+    setAlta((current) =>
+      importCaptureAssignment({ ...emptyAlta(), ...current }, captureContext, vendorOptions)
+    );
     setAltaReturnToCapture(true);
     setCaptureStateFromGroup(name);
     setActiveTab('asegurados');
@@ -2175,24 +2200,11 @@ function App() {
                     </div>
                   </div>
                 )}
-                <div className="inline-toggle">
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={genericAssignmentToggleState.checked}
-                    aria-disabled={genericAssignmentToggleState.disabled}
-                    disabled={genericAssignmentToggleState.disabled}
-                    title={genericAssignmentToggleState.statusLabel || undefined}
-                    className={`toggle-switch${genericAssignmentToggleState.checked ? ' is-on' : ''}`}
-                    onClick={handleToggleAssignmentMode}
-                  >
-                    <span className="toggle-switch-thumb" aria-hidden="true" />
-                  </button>
-                  <span className="inline-toggle-label">Vendedor genérico</span>
-                  {genericAssignmentToggleState.statusLabel ? (
-                    <span className="inline-toggle-status">{genericAssignmentToggleState.statusLabel}</span>
-                  ) : null}
-                </div>
+                <InlineGenericVendorToggle
+                  state={genericAssignmentToggleState}
+                  label="Vendedor genérico"
+                  onToggle={handleToggleAssignmentMode}
+                />
               </div>
               {capture.assignmentMode !== 'generic' ? (
                 <div className="combo-cell">
@@ -2496,24 +2508,11 @@ function App() {
                     }));
                   }}
                 />
-                <div className="inline-toggle">
-                  <button
-                    type="button"
-                    role="switch"
-                    aria-checked={altaGenericToggleState.checked}
-                    aria-disabled={altaGenericToggleState.disabled}
-                    disabled={altaGenericToggleState.disabled}
-                    title={altaGenericToggleState.statusLabel || undefined}
-                    className={`toggle-switch${altaGenericToggleState.checked ? ' is-on' : ''}`}
-                    onClick={handleToggleAltaAssignmentMode}
-                  >
-                    <span className="toggle-switch-thumb" aria-hidden="true" />
-                  </button>
-                  <span className="inline-toggle-label">Vendedor genérico</span>
-                  {altaGenericToggleState.statusLabel ? (
-                    <span className="inline-toggle-status">{altaGenericToggleState.statusLabel}</span>
-                  ) : null}
-                </div>
+                <InlineGenericVendorToggle
+                  state={altaGenericToggleState}
+                  label="Vendedor genérico"
+                  onToggle={handleToggleAltaAssignmentMode}
+                />
               </div>
               <div className="combo-cell">
                 <ComboField
@@ -2736,7 +2735,7 @@ function App() {
                   </label>
                   <label className="dropzone">
                     <strong>Sube la constancia de situación fiscal</strong>
-                    <small>PDF, JPG o PNG · se guarda con el expediente</small>
+                    <small>PDF, JPG o PNG · se adjunta a esta captura y la IA no lo lee</small>
                     <input
                       type="file"
                       accept=".pdf,.jpg,.jpeg,.png,application/pdf,image/jpeg,image/png"

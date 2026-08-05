@@ -1,4 +1,5 @@
 import { findVendorByClave } from './api.js';
+import { normalizeText } from './utils.js';
 
 /**
  * Generic-vendor assignment for the Alta de asegurados form.
@@ -61,4 +62,33 @@ export function toggleAltaGenericVendor(current, vendors) {
 export function applyAltaContextChange(current, patch) {
   const next = { ...current, ...patch };
   return current?.assignmentMode === 'generic' ? next : { ...next, vendedor: '' };
+}
+
+/**
+ * Imports the capture tab's assignment (`linea`, `gerencia`, `vendedor`) into
+ * the alta and re-derives everything that describes the vendor.
+ *
+ * `assignmentMode` and `vendedorId` are properties *of a vendor*, so copying a
+ * vendor over without them leaves the alta describing the previous one: a
+ * manual vendor behind a switch still rendered ON, whose next click runs the
+ * return-to-manual path and erases the vendor just carried over. Both are
+ * therefore recomputed from the catalogue entry the imported display value
+ * resolves to — generic when that entry is VG001, manual otherwise, and empty
+ * when nothing resolves.
+ */
+export function importCaptureAssignment(current, captureContext, vendors) {
+  const next = { ...current, ...captureContext };
+  const vendedor = normalizeText(next.vendedor);
+  const catalogue = vendors || [];
+  const match = vendedor
+    ? catalogue.find((vendor) => normalizeText(vendor?.Valor ?? vendor?.Texto ?? '') === vendedor) || null
+    : null;
+  const generic = findVendorByClave(catalogue);
+  const isGeneric = Boolean(match) && Boolean(generic) && vendedor === normalizeText(generic.Valor);
+
+  return {
+    ...next,
+    assignmentMode: isGeneric ? 'generic' : 'manual',
+    vendedorId: match?.IdVendedor ? String(match.IdVendedor) : ''
+  };
 }
