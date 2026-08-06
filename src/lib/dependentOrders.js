@@ -65,6 +65,13 @@ export function addCalendarDays(iso, delta) {
   const parts = parseIsoDate(iso);
   if (!parts) return '';
 
+  // Reject non-integer deltas: the day-arithmetic loop below only ever advances
+  // whole days, so a fractional delta would corrupt the output (for example
+  // addCalendarDays('2024-01-01', 1.5) used to produce the malformed
+  // '2024-01-2.5'). Callers only ever pass integers, so a non-integer is treated
+  // like any other invalid input and returns ''.
+  if (!Number.isInteger(delta)) return '';
+
   let { year, month, day } = parts;
   let remaining = delta;
 
@@ -124,7 +131,7 @@ function normalizeOrderField(value) {
   return String(value ?? '').trim();
 }
 
-export function validateDependentOrder(order, subramoCatalog = []) {
+export function validateDependentOrder(order, subramoCatalog = [], options = {}) {
   const errors = {};
 
   const folio = normalizeOrderField(order?.folio);
@@ -139,7 +146,11 @@ export function validateDependentOrder(order, subramoCatalog = []) {
   if (!ramo) errors.ramo = 'El ramo es requerido.';
 
   const hasSubramos = Array.isArray(subramoCatalog) && subramoCatalog.length > 0;
-  if (hasSubramos && !subramo) {
+  // requireSubramo lets a caller fail closed when the catalogue is unknown
+  // (still loading or the load failed): the subramo must stay required instead
+  // of silently being treated as optional because the catalogue is empty.
+  const requireSubramo = options.requireSubramo ?? hasSubramos;
+  if (requireSubramo && !subramo) {
     errors.subramo = 'El subramo es requerido para este ramo.';
   }
 

@@ -60,6 +60,21 @@ export function setupFakeDom(storedAuth, fetchImpl) {
     compareDocumentPosition(node) {
       return this === node ? 0 : 4;
     }
+    // The DatePicker's focus effect walks the grid with
+    // gridRef.current.querySelector('[tabindex="0"]'), so a tiny attribute
+    // selector is enough for the real component to move focus to the active day.
+    querySelector(selector) {
+      const match = selector.match(/^\[([a-zA-Z-]+)="([^"]*)"\]$/);
+      if (!match) return null;
+      const name = match[1];
+      const value = match[2];
+      if (String(this.attributes[name]) === value) return this;
+      for (const child of this.children || []) {
+        const found = child.querySelector && child.querySelector(selector);
+        if (found) return found;
+      }
+      return null;
+    }
     focus() {
       document.activeElement = this;
     }

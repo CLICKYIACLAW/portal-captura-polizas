@@ -208,6 +208,12 @@ describe('PR J — dependent orders', () => {
       assert.deepEqual(result.errors, {});
     });
 
+    it('can force the subramo requirement when the catalogue is unknown (fail-closed)', () => {
+      const result = validateDependentOrder({ ...baseOrder, subramo: '' }, [], { requireSubramo: true });
+      assert.equal(result.valid, false);
+      assert.ok(result.errors.subramo);
+    });
+
     it('rejects an invalid start date', () => {
       const result = validateDependentOrder({ ...baseOrder, startDate: 'not-a-date' });
       assert.equal(result.valid, false);
@@ -317,6 +323,11 @@ describe('PR J — dependent orders', () => {
       assert.equal(addCalendarDays('2025-03-15', 1), '2025-03-16');
       assert.equal(addCalendarDays('2025-03-01', -1), '2025-02-28');
       assert.equal(addCalendarDays('2024-02-28', 2), '2024-03-01');
+    });
+
+    it('rejects non-integer deltas instead of corrupting the date', () => {
+      assert.equal(addCalendarDays('2024-01-01', 1.5), '');
+      assert.equal(addCalendarDays('2024-01-01', -0.5), '');
     });
   });
 

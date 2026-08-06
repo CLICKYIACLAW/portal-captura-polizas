@@ -1041,6 +1041,38 @@ function DatePicker({
     setViewMonth({ year: nextYear, month: nextMonth });
   }
 
+  // PageUp/PageDown keep the same day of the month, clamped to the target
+  // month's length (Jan 31 -> Feb 28), and keep focus on the active day.
+  function moveActiveMonth(deltaMonths) {
+    const currentIso =
+      activeIso || isoForDay(buildCalendarDays(viewMonth.year, viewMonth.month).find((d) => d.currentMonth));
+    if (!currentIso) return;
+    const parts = parseIsoDate(currentIso);
+    if (!parts) return;
+    let nextMonth = parts.month + deltaMonths;
+    let nextYear = parts.year;
+    while (nextMonth > 12) {
+      nextMonth -= 12;
+      nextYear += 1;
+    }
+    while (nextMonth < 1) {
+      nextMonth += 12;
+      nextYear -= 1;
+    }
+    const clampedDay = Math.min(parts.day, daysInMonth(nextYear, nextMonth));
+    const nextIso = formatIsoDate({ year: nextYear, month: nextMonth, day: clampedDay });
+    setActiveIso(nextIso);
+    setViewMonth({ year: nextYear, month: nextMonth });
+  }
+
+  // Home/End move within the current week: to Sunday / Saturday.
+  function moveActiveToWeekEdge(edge) {
+    const parts = activeIso ? parseIsoDate(activeIso) : null;
+    if (!parts) return;
+    const dayOfWeek = new Date(parts.year, parts.month - 1, parts.day).getDay();
+    moveActiveDay(edge === 'start' ? -dayOfWeek : 6 - dayOfWeek);
+  }
+
   function selectDate(iso) {
     setOpen(false);
     setError('');
@@ -1105,13 +1137,60 @@ function DatePicker({
   }
 
   function handleGridKeyDown(event, dayIso) {
+    // Focus lives in the grid once the picker is open, so the navigation keys
+    // must be handled here (roving focus): only the active day is tabbable and
+    // every other key moves the active day, which the focus effect then brings
+    // into the tab order and focuses.
     if (event.key === 'Enter' || event.key === ' ') {
       event.preventDefault();
       selectDate(dayIso);
-    } else if (event.key === 'Escape') {
+      return;
+    }
+    if (event.key === 'Escape') {
       event.preventDefault();
       setOpen(false);
       inputRef.current?.focus();
+      return;
+    }
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      moveActiveDay(7);
+      return;
+    }
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      moveActiveDay(-7);
+      return;
+    }
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      moveActiveDay(-1);
+      return;
+    }
+    if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      moveActiveDay(1);
+      return;
+    }
+    if (event.key === 'Home') {
+      event.preventDefault();
+      moveActiveToWeekEdge('start');
+      return;
+    }
+    if (event.key === 'End') {
+      event.preventDefault();
+      moveActiveToWeekEdge('end');
+      return;
+    }
+    if (event.key === 'PageUp') {
+      event.preventDefault();
+      moveActiveMonth(event.shiftKey ? -12 : -1);
+      return;
+    }
+    if (event.key === 'PageDown') {
+      event.preventDefault();
+      moveActiveMonth(event.shiftKey ? 12 : 1);
+      return;
     }
   }
 
@@ -1190,7 +1269,7 @@ function DatePicker({
                         role="gridcell"
                         tabIndex={isActive ? 0 : -1}
                         aria-selected={isSelected || undefined}
-                        aria-label={`${dayItem.day} de ${WEEKDAY_LABELS[viewMonth.month - 1]} de ${viewMonth.year}${isToday ? ' (hoy)' : ''}`}
+                        aria-label={`${dayItem.day} de ${MONTH_LABELS[viewMonth.month - 1]} de ${viewMonth.year}${isToday ? ' (hoy)' : ''}`}
                         className={`date-picker-day ${dayItem.currentMonth ? '' : 'adjacent'} ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}`}
                         onClick={() => selectDate(dayIso)}
                         onKeyDown={(event) => handleGridKeyDown(event, dayIso)}
@@ -1369,6 +1448,13 @@ function App() {
   const [bootVersion, setBootVersion] = useState('React + MySQL · seed local');
   const [ramoCatalog, setRamoCatalog] = useState([]);
   const [subramoCatalog, setSubramoCatalog] = useState([]);
+  // The OT modal loads its OWN subramo catalogue for the OT's ramo (draft.ramo),
+  // independent of the policy's subramoCatalog/subramosLoading above. The error
+  // flag keeps a failed load distinct from an empty catalogue, so the failure is
+  // never shown as "this ramo has no subramos" and never downgrades the rule.
+  const [otSubramoCatalog, setOtSubramoCatalog] = useState([]);
+  const [otSubramosLoading, setOtSubramosLoading] = useState(false);
+  const [otSubramosError, setOtSubramosError] = useState('');
   const [vendedorCatalog, setVendedorCatalog] = useState([]);
   const [aseguradoCatalog, setAseguradoCatalog] = useState([]);
   const [groupCatalog, setGroupCatalog] = useState([]);
@@ -1521,11 +1607,14 @@ function App() {
 
   function saveDependentOrderModal() {
     const { draft } = dependentOrderModal;
-    const hasSubramosForDraft =
-      Boolean(normalizeText(draft.ramo)) &&
-      normalizeKey(draft.ramo) === normalizeKey(capture.ramo) &&
-      subramoOptions.length > 0;
-    const validation = validateDependentOrder(draft, hasSubramosForDraft ? subramoOptions : []);
+    // The rule comes from the OT's OWN ramo catalogue. While it is still loading
+    // or failed we cannot prove the ramo has no subramos, so the requirement
+    // stays on (fail closed) instead of silently turning optional.
+    const otRequiresSubramo =
+      otSubramosLoading || Boolean(otSubramosError) || otSubramoCatalog.length > 0;
+    const validation = validateDependentOrder(draft, otSubramoCatalog, {
+      requireSubramo: otRequiresSubramo
+    });
 
     if (!validation.valid) {
       setDependentOrderModal((current) => ({ ...current, errors: validation.errors }));
@@ -1722,6 +1811,56 @@ function App() {
       mounted = false;
     };
   }, [capture.ramo, selectedRamoLabel]);
+
+  // The OT modal loads the subramo catalogue for the OT's OWN ramo (draft.ramo),
+  // mirroring the capture flow above: the ramo value is resolved to the id the
+  // API expects with the same String(...).trim() lookup, and the in-flight load
+  // is invalidated the moment the user changes the ramo again, so a late
+  // response can never populate the catalogue for a ramo that is no longer
+  // selected. Closing the modal resets the whole state.
+  useEffect(() => {
+    if (!dependentOrderModal.open) {
+      setOtSubramoCatalog([]);
+      setOtSubramosLoading(false);
+      setOtSubramosError('');
+      return undefined;
+    }
+
+    const ramoId = String(dependentOrderModal.draft.ramo || '').trim();
+    if (!ramoId) {
+      setOtSubramoCatalog([]);
+      setOtSubramosLoading(false);
+      setOtSubramosError('');
+      return undefined;
+    }
+
+    let mounted = true;
+    setOtSubramoCatalog([]);
+    setOtSubramosError('');
+    setOtSubramosLoading(true);
+    loadSubramos(ramoId)
+      .then((payload) => {
+        if (!mounted) return;
+        if (payload?.subramos) {
+          setOtSubramoCatalog(payload.subramos);
+        } else {
+          setOtSubramoCatalog([]);
+        }
+      })
+      .catch((subramoError) => {
+        if (!mounted) return;
+        setOtSubramoCatalog([]);
+        setOtSubramosError(subramoError.message || 'No se pudieron cargar los subramos');
+      })
+      .finally(() => {
+        if (!mounted) return;
+        setOtSubramosLoading(false);
+      });
+
+    return () => {
+      mounted = false;
+    };
+  }, [dependentOrderModal.open, dependentOrderModal.draft.ramo]);
 
   useEffect(() => {
     if (capture.assignmentMode === 'generic') {
@@ -2394,15 +2533,49 @@ function App() {
           disabled={ramosLoading || !ramoOptions.length}
           onSelect={(value) => updateDependentOrderDraft({ ramo: value, subramo: '' })}
         />
-        {showSubramo ? (
-          <ComboField
-            label={subramoOptions.length ? 'Subramo *' : 'Subramo'}
-            value={dependentOrderModal.draft.subramo}
-            options={subramoOptions}
-            placeholder={subramosLoading ? 'Cargando subramos...' : 'Selecciona el subramo'}
-            disabled={subramosLoading || !subramoOptions.length}
-            onSelect={(value) => updateDependentOrderDraft({ subramo: value })}
-          />
+        {dependentOrderModal.draft.ramo ? (
+          otSubramosLoading ? (
+            <>
+              <ComboField
+                label="Subramo"
+                value={dependentOrderModal.draft.subramo}
+                options={[]}
+                placeholder="Cargando subramos..."
+                disabled
+              />
+              {dependentOrderModal.errors.subramo ? (
+                <span id="dependent-order-subramo-error" className="field-error">
+                  {dependentOrderModal.errors.subramo}
+                </span>
+              ) : null}
+            </>
+          ) : otSubramosError ? (
+            <>
+              <span id="dependent-order-subramo-error" className="field-error">
+                No se pudieron cargar los subramos de este ramo.
+              </span>
+              {dependentOrderModal.errors.subramo ? (
+                <span className="field-error">{dependentOrderModal.errors.subramo}</span>
+              ) : null}
+            </>
+          ) : otSubramoCatalog.length ? (
+            <>
+              <ComboField
+                label="Subramo *"
+                value={dependentOrderModal.draft.subramo}
+                options={otSubramoCatalog}
+                placeholder="Selecciona el subramo"
+                onSelect={(value) => updateDependentOrderDraft({ subramo: value })}
+              />
+              {dependentOrderModal.errors.subramo ? (
+                <span id="dependent-order-subramo-error" className="field-error">
+                  {dependentOrderModal.errors.subramo}
+                </span>
+              ) : null}
+            </>
+          ) : (
+            <p className="field-hint">Este ramo no tiene subramos.</p>
+          )
         ) : null}
         <DatePicker
           id="dependent-order-start-date"
