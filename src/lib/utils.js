@@ -60,7 +60,6 @@ export function applyAssignmentSelection(
     ramoData: {},
     extracted: false,
     confirmed: false,
-    dependentOrders: [],
     documentsInvalidated: current.documentsInvalidated || hadDocuments || hadReadState
   };
 }

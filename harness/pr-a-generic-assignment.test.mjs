@@ -188,6 +188,39 @@ describe('PR A — generic capture assignment', () => {
       assert.equal(capture.assignmentMode, 'manual');
     });
 
+    it('emptyCapture initializes ordenTrabajo empty', () => {
+      const capture = emptyCapture();
+      assert.equal(capture.ordenTrabajo, '');
+    });
+
+    it('applyAssignmentSelection updates ordenTrabajo like any other assignment field', () => {
+      const current = emptyCapture();
+      const next = applyAssignmentSelection(current, 'ordenTrabajo', 'OT-123', {}, current.layout.length);
+
+      assert.equal(next.ordenTrabajo, 'OT-123');
+      assert.equal(next.confirmed, false);
+    });
+
+    it('changing ordenTrabajo invalidates documents when a previous selection existed', () => {
+      const current = {
+        ...emptyCapture(),
+        ordenTrabajo: 'OT-100',
+        files: [{ name: 'poliza.pdf' }],
+        extracted: true,
+        aseguradora: 'AXA',
+        poliza: 'P-1'
+      };
+
+      const next = applyAssignmentSelection(current, 'ordenTrabajo', 'OT-200', {}, current.layout.length);
+
+      assert.equal(next.ordenTrabajo, 'OT-200');
+      assert.equal(next.files.length, 0);
+      assert.equal(next.extracted, false);
+      assert.equal(next.aseguradora, '');
+      assert.equal(next.poliza, '');
+      assert.equal(next.documentsInvalidated, true);
+    });
+
     it('activateGenericAssignment sets the generic tuple and clears documents when the tuple really changes', () => {
       const current = {
         ...emptyCapture(),

@@ -6,7 +6,7 @@
  * so this change is purely visual: the SectionFields form is no longer
  * rendered, while the confirmation checkbox and the Guardar/Limpiar actions
  * must behave exactly as before. These tests drive the real <App /> through a
- * real extraction (upload + Leer póliza against a stubbed Anthropic endpoint)
+ * real extraction (upload + Leer documentos against a stubbed Anthropic endpoint)
  * and assert on the rendered card, then scan the source to pin that the layout
  * plumbing survived the edit.
  */
@@ -180,7 +180,7 @@ async function runExtraction(container) {
   assert.ok(polizaInput, 'expected the póliza file input');
   await act(() => polizaInput.props.onChange({ target: { files: [POLIZA_FILE] } }));
 
-  await clickButton(container, 'Leer póliza');
+  await clickButton(container, 'Leer documentos');
 }
 
 describe('§1 — the hidden policy form keeps confirmation and reset', () => {

@@ -9,6 +9,9 @@ const BI_ASEGURADOS_URL = 'https://ws.developmentservices.com.mx/BIFranquicias/S
 const BI_GRUPOS_URL = 'https://ws.developmentservices.com.mx/BIFranquicias/Sicas/Generar/Buscar_Grupos';
 const BI_RAMOS_URL = 'https://ws.developmentservices.com.mx/BIFranquicias/Sicas/Generar/CKIA_Captura_Trae_Ramos';
 const BI_SUBRAMOS_URL = 'https://ws.developmentservices.com.mx/BIFranquicias/Sicas/Generar/CKIA_Captura_Trae_SubRamos';
+// Stub endpoint suggestion for the future "Buscar_OrdenesTrabajo" BI Franquicias integration.
+// No real URL or token exists yet; keep this undefined until the operations team supplies one.
+const BI_ORDENES_TRABAJO_URL = undefined;
 const BI_EXECUTIVES_TOKEN = '6Vqe/9+YKj+mUmDapL5lTvgoEQyh10DW2rWuX2YzJSlMjuFL9jeRc8Hrs1k5yWfA986nayzTIyw8biLU/8C93big9fQx3dMXj8NwUock98CydCTvciSpuqo2EFLEe7/6';
 const BI_RAMOS_TOKEN = '6Vqe/9+YKj+mUmDapL5lTvgoEQyh10DW2rWuX2YzJSlMjuFL9jeRc8Hrs1k5yWfA986nayzTIyw8biLU/8C93big9fQx3dMXj8NwUock98CydCTvciSpuqo2EFLEe7/6';
 
@@ -274,6 +277,14 @@ export function loadSubramos() {
     'subramos',
     BI_RAMOS_TOKEN
   );
+}
+
+// Stub loader for the Orden de trabajo catalogue.
+// Awaiting a real BI Franquicias endpoint (suggested name: Buscar_OrdenesTrabajo).
+// When wired, replace the body below with the actual fetch call and keep the
+// return shape { ok: true, ordenesTrabajo: [...] } so callers do not change.
+export async function loadOrdenesTrabajo() {
+  return { ok: true, ordenesTrabajo: [] };
 }
 
 export function createPoliza(payload) {
