@@ -10,6 +10,7 @@ import {
   findVendorByClave,
   loadAsegurados,
   loadGrupos,
+  loadOrdenesTrabajo,
   loadRamos,
   loadVendedores,
   loadSubramos
@@ -49,18 +50,6 @@ import {
   splitName
 } from './lib/utils';
 import { findGroupNameMatches } from './lib/groupCatalog';
-import {
-  addDependentOrder,
-  createDependentOrder,
-  formatDateInput,
-  parseDateInput,
-  removeDependentOrder,
-  updateDependentOrder,
-  validateDependentOrder,
-  parseIsoDate,
-  formatIsoDate,
-  daysInMonth
-} from './lib/dependentOrders';
 import { applyAltaContextChange, importCaptureAssignment, toggleAltaGenericVendor } from './lib/altaAssignment';
 import {
   REGIMENES_FISCALES,
@@ -113,6 +102,7 @@ export function emptyCapture(length = POLIZA_LAYOUT_FIELDS.length) {
     assignmentMode: 'manual',
     ramo: '',
     subramo: '',
+    ordenTrabajo: '',
     aseguradora: '',
     poliza: '',
     layout: Array(length).fill(''),
@@ -121,8 +111,7 @@ export function emptyCapture(length = POLIZA_LAYOUT_FIELDS.length) {
     files: [],
     extracted: false,
     confirmed: false,
-    documentsInvalidated: false,
-    dependentOrders: []
+    documentsInvalidated: false
   };
 }
 
@@ -885,410 +874,6 @@ function Modal({
 /** How long the "request sent" notice stays up before the modal closes itself. */
 const GROUP_REQUEST_NOTICE_MS = 1800;
 
-const MONTH_LABELS = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
-const WEEKDAY_LABELS = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
-const WEEKDAY_SHORT_LABELS = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
-
-function DatePicker({
-  id,
-  label,
-  value,
-  onChange,
-  ariaDescribedBy,
-  disabled = false
-}) {
-  const [open, setOpen] = useState(false);
-  const [inputText, setInputText] = useState(formatDateInput(value));
-  const [viewMonth, setViewMonth] = useState(() => {
-    const parts = parseIsoDate(value);
-    if (parts) return { year: parts.year, month: parts.month };
-    const today = new Date();
-    return { year: today.getFullYear(), month: today.getMonth() + 1 };
-  });
-  const [activeIso, setActiveIso] = useState(value || '');
-  const [error, setError] = useState('');
-  const inputRef = useRef(null);
-  const popoverRef = useRef(null);
-  const gridRef = useRef(null);
-
-  useEffect(() => {
-    setInputText(formatDateInput(value));
-    const parts = parseIsoDate(value);
-    if (parts) {
-      setViewMonth({ year: parts.year, month: parts.month });
-      setActiveIso(value);
-    }
-    setError('');
-  }, [value]);
-
-  useEffect(() => {
-    if (!open) return undefined;
-
-    function handleDocumentMouseDown(event) {
-      const target = event.target;
-      const popover = popoverRef.current;
-      const input = inputRef.current;
-      if (
-        popover &&
-        input &&
-        !popover.contains(target) &&
-        !input.contains(target)
-      ) {
-        setOpen(false);
-      }
-    }
-
-    function handleDocumentKeyDown(event) {
-      if (event.key === 'Escape') {
-        event.preventDefault();
-        setOpen(false);
-        inputRef.current?.focus();
-      }
-    }
-
-    document.addEventListener('mousedown', handleDocumentMouseDown);
-    document.addEventListener('keydown', handleDocumentKeyDown);
-    return () => {
-      document.removeEventListener('mousedown', handleDocumentMouseDown);
-      document.removeEventListener('keydown', handleDocumentKeyDown);
-    };
-  }, [open]);
-
-  useEffect(() => {
-    if (open && gridRef.current) {
-      const activeButton = gridRef.current.querySelector('[tabindex="0"]');
-      activeButton?.focus();
-    }
-  }, [open, viewMonth, activeIso]);
-
-  function firstDayOffset(year, month) {
-    return new Date(year, month - 1, 1).getDay();
-  }
-
-  function buildCalendarDays(year, month) {
-    const days = [];
-    const offset = firstDayOffset(year, month);
-    const prevDays = daysInMonth(year, month - 1);
-    for (let i = offset - 1; i >= 0; i -= 1) {
-      days.push({ year, month: month - 1, day: prevDays - i, currentMonth: false });
-    }
-    const currentDays = daysInMonth(year, month);
-    for (let day = 1; day <= currentDays; day += 1) {
-      days.push({ year, month, day, currentMonth: true });
-    }
-    const remaining = (7 - (days.length % 7)) % 7;
-    for (let day = 1; day <= remaining; day += 1) {
-      days.push({ year, month: month + 1, day, currentMonth: false });
-    }
-    return days;
-  }
-
-  function isoForDay(dayItem) {
-    let { year, month } = dayItem;
-    if (month === 0) {
-      month = 12;
-      year -= 1;
-    } else if (month === 13) {
-      month = 1;
-      year += 1;
-    }
-    return formatIsoDate({ year, month, day: dayItem.day });
-  }
-
-  function shiftViewMonth(deltaYear, deltaMonth) {
-    setViewMonth((current) => {
-      let nextMonth = current.month + deltaMonth;
-      let nextYear = current.year + deltaYear;
-      while (nextMonth > 12) {
-        nextMonth -= 12;
-        nextYear += 1;
-      }
-      while (nextMonth < 1) {
-        nextMonth += 12;
-        nextYear -= 1;
-      }
-      return { year: nextYear, month: nextMonth };
-    });
-  }
-
-  function moveActiveDay(deltaDays) {
-    const currentIso = activeIso || isoForDay(buildCalendarDays(viewMonth.year, viewMonth.month).find((d) => d.currentMonth));
-    if (!currentIso) return;
-    const parts = parseIsoDate(currentIso);
-    if (!parts) return;
-    const { year, month, day } = parts;
-    const limit = daysInMonth(year, month);
-    let nextDay = day + deltaDays;
-    let nextMonth = month;
-    let nextYear = year;
-    if (nextDay > limit) {
-      nextDay -= limit;
-      nextMonth += 1;
-      if (nextMonth > 12) {
-        nextMonth = 1;
-        nextYear += 1;
-      }
-    } else if (nextDay < 1) {
-      nextMonth -= 1;
-      if (nextMonth < 1) {
-        nextMonth = 12;
-        nextYear -= 1;
-      }
-      nextDay = daysInMonth(nextYear, nextMonth) + nextDay;
-    }
-    const nextIso = formatIsoDate({ year: nextYear, month: nextMonth, day: nextDay });
-    setActiveIso(nextIso);
-    setViewMonth({ year: nextYear, month: nextMonth });
-  }
-
-  // PageUp/PageDown keep the same day of the month, clamped to the target
-  // month's length (Jan 31 -> Feb 28), and keep focus on the active day.
-  function moveActiveMonth(deltaMonths) {
-    const currentIso =
-      activeIso || isoForDay(buildCalendarDays(viewMonth.year, viewMonth.month).find((d) => d.currentMonth));
-    if (!currentIso) return;
-    const parts = parseIsoDate(currentIso);
-    if (!parts) return;
-    let nextMonth = parts.month + deltaMonths;
-    let nextYear = parts.year;
-    while (nextMonth > 12) {
-      nextMonth -= 12;
-      nextYear += 1;
-    }
-    while (nextMonth < 1) {
-      nextMonth += 12;
-      nextYear -= 1;
-    }
-    const clampedDay = Math.min(parts.day, daysInMonth(nextYear, nextMonth));
-    const nextIso = formatIsoDate({ year: nextYear, month: nextMonth, day: clampedDay });
-    setActiveIso(nextIso);
-    setViewMonth({ year: nextYear, month: nextMonth });
-  }
-
-  // Home/End move within the current week: to Sunday / Saturday.
-  function moveActiveToWeekEdge(edge) {
-    const parts = activeIso ? parseIsoDate(activeIso) : null;
-    if (!parts) return;
-    const dayOfWeek = new Date(parts.year, parts.month - 1, parts.day).getDay();
-    moveActiveDay(edge === 'start' ? -dayOfWeek : 6 - dayOfWeek);
-  }
-
-  function selectDate(iso) {
-    setOpen(false);
-    setError('');
-    onChange(iso);
-    inputRef.current?.focus();
-  }
-
-  function commitInputText(text) {
-    const result = parseDateInput(text);
-    if (result === '') {
-      setError('');
-      onChange('');
-    } else if (result === null) {
-      setError('Fecha inválida. Usa DD/MM/AAAA.');
-    } else {
-      setError('');
-      onChange(result);
-    }
-  }
-
-  function handleInputKeyDown(event) {
-    if (event.key === 'Enter') {
-      event.preventDefault();
-      commitInputText(inputText);
-    } else if (event.key === 'ArrowDown' && open) {
-      event.preventDefault();
-      moveActiveDay(7);
-    } else if (event.key === 'ArrowUp' && open) {
-      event.preventDefault();
-      moveActiveDay(-7);
-    } else if (event.key === 'ArrowLeft' && open) {
-      event.preventDefault();
-      moveActiveDay(-1);
-    } else if (event.key === 'ArrowRight' && open) {
-      event.preventDefault();
-      moveActiveDay(1);
-    } else if (event.key === 'Home' && open) {
-      event.preventDefault();
-      const parts = activeIso ? parseIsoDate(activeIso) : null;
-      const dayOfWeek = parts ? new Date(parts.year, parts.month - 1, parts.day).getDay() : 0;
-      moveActiveDay(-dayOfWeek);
-    } else if (event.key === 'End' && open) {
-      event.preventDefault();
-      const parts = activeIso ? parseIsoDate(activeIso) : null;
-      const dayOfWeek = parts ? new Date(parts.year, parts.month - 1, parts.day).getDay() : 6;
-      moveActiveDay(6 - dayOfWeek);
-    } else if (event.key === 'PageUp') {
-      event.preventDefault();
-      if (event.shiftKey) {
-        shiftViewMonth(-1, 0);
-      } else {
-        shiftViewMonth(0, -1);
-      }
-    } else if (event.key === 'PageDown') {
-      event.preventDefault();
-      if (event.shiftKey) {
-        shiftViewMonth(1, 0);
-      } else {
-        shiftViewMonth(0, 1);
-      }
-    }
-  }
-
-  function handleGridKeyDown(event, dayIso) {
-    // Focus lives in the grid once the picker is open, so the navigation keys
-    // must be handled here (roving focus): only the active day is tabbable and
-    // every other key moves the active day, which the focus effect then brings
-    // into the tab order and focuses.
-    if (event.key === 'Enter' || event.key === ' ') {
-      event.preventDefault();
-      selectDate(dayIso);
-      return;
-    }
-    if (event.key === 'Escape') {
-      event.preventDefault();
-      setOpen(false);
-      inputRef.current?.focus();
-      return;
-    }
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      moveActiveDay(7);
-      return;
-    }
-    if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      moveActiveDay(-7);
-      return;
-    }
-    if (event.key === 'ArrowLeft') {
-      event.preventDefault();
-      moveActiveDay(-1);
-      return;
-    }
-    if (event.key === 'ArrowRight') {
-      event.preventDefault();
-      moveActiveDay(1);
-      return;
-    }
-    if (event.key === 'Home') {
-      event.preventDefault();
-      moveActiveToWeekEdge('start');
-      return;
-    }
-    if (event.key === 'End') {
-      event.preventDefault();
-      moveActiveToWeekEdge('end');
-      return;
-    }
-    if (event.key === 'PageUp') {
-      event.preventDefault();
-      moveActiveMonth(event.shiftKey ? -12 : -1);
-      return;
-    }
-    if (event.key === 'PageDown') {
-      event.preventDefault();
-      moveActiveMonth(event.shiftKey ? 12 : 1);
-      return;
-    }
-  }
-
-  const calendarDays = buildCalendarDays(viewMonth.year, viewMonth.month);
-  const today = new Date();
-  const todayIso = formatIsoDate({ year: today.getFullYear(), month: today.getMonth() + 1, day: today.getDate() });
-
-  return (
-    <div className="date-picker">
-      <label htmlFor={id}>{label}</label>
-      <input
-        id={id}
-        ref={inputRef}
-        type="text"
-        inputMode="numeric"
-        placeholder="DD/MM/AAAA"
-        value={inputText}
-        disabled={disabled}
-        aria-invalid={error ? 'true' : undefined}
-        aria-describedby={error ? `${id}-error` : ariaDescribedBy}
-        onChange={(event) => setInputText(event.target.value)}
-        onClick={() => setOpen((current) => !current)}
-        onBlur={() => commitInputText(inputText)}
-        onKeyDown={handleInputKeyDown}
-      />
-      {error ? (
-        <span id={`${id}-error`} className="date-picker-error">
-          {error}
-        </span>
-      ) : null}
-      {open ? (
-        <div ref={popoverRef} className="date-picker-popover">
-          <div className="date-picker-header">
-            <button
-              type="button"
-              className="date-picker-prev"
-              aria-label="Mes anterior"
-              onClick={() => shiftViewMonth(0, -1)}
-            >
-              ‹
-            </button>
-            <span className="date-picker-month" aria-live="polite">
-              {MONTH_LABELS[viewMonth.month - 1]} {viewMonth.year}
-            </span>
-            <button
-              type="button"
-              className="date-picker-next"
-              aria-label="Mes siguiente"
-              onClick={() => shiftViewMonth(0, 1)}
-            >
-              ›
-            </button>
-          </div>
-          <div ref={gridRef} className="date-picker-grid" role="grid" aria-label={`Calendario ${viewMonth.month}/${viewMonth.year}`}>
-            <div className="date-picker-weekdays" role="row">
-              {WEEKDAY_SHORT_LABELS.map((name) => (
-                <span key={name} role="columnheader" aria-label={name}>
-                  {name}
-                </span>
-              ))}
-            </div>
-            {Array.from({ length: 6 }).map((_, weekIndex) => {
-              const weekDays = calendarDays.slice(weekIndex * 7, weekIndex * 7 + 7);
-              if (weekDays.length < 7 || !weekDays.some((d) => d.currentMonth)) return null;
-              return (
-                <div key={weekIndex} className="date-picker-week" role="row">
-                  {weekDays.map((dayItem) => {
-                    const dayIso = isoForDay(dayItem);
-                    const isSelected = dayIso === value;
-                    const isToday = dayIso === todayIso;
-                    const isActive = dayIso === activeIso;
-                    return (
-                      <button
-                        key={dayIso}
-                        type="button"
-                        role="gridcell"
-                        tabIndex={isActive ? 0 : -1}
-                        aria-selected={isSelected || undefined}
-                        aria-label={`${dayItem.day} de ${MONTH_LABELS[viewMonth.month - 1]} de ${viewMonth.year}${isToday ? ' (hoy)' : ''}`}
-                        className={`date-picker-day ${dayItem.currentMonth ? '' : 'adjacent'} ${isSelected ? 'selected' : ''} ${isToday ? 'today' : ''}`}
-                        onClick={() => selectDate(dayIso)}
-                        onKeyDown={(event) => handleGridKeyDown(event, dayIso)}
-                        onFocus={() => setActiveIso(dayIso)}
-                      >
-                        {dayItem.day}
-                      </button>
-                    );
-                  })}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
-
 export function useGroupModal({
   alta,
   setAlta,
@@ -1448,28 +1033,17 @@ function App() {
   const [bootVersion, setBootVersion] = useState('React + MySQL · seed local');
   const [ramoCatalog, setRamoCatalog] = useState([]);
   const [subramoCatalog, setSubramoCatalog] = useState([]);
-  // The OT modal loads its OWN subramo catalogue for the OT's ramo (draft.ramo),
-  // independent of the policy's subramoCatalog/subramosLoading above. The error
-  // flag keeps a failed load distinct from an empty catalogue, so the failure is
-  // never shown as "this ramo has no subramos" and never downgrades the rule.
-  const [otSubramoCatalog, setOtSubramoCatalog] = useState([]);
-  const [otSubramosLoading, setOtSubramosLoading] = useState(false);
-  const [otSubramosError, setOtSubramosError] = useState('');
   const [vendedorCatalog, setVendedorCatalog] = useState([]);
   const [aseguradoCatalog, setAseguradoCatalog] = useState([]);
   const [groupCatalog, setGroupCatalog] = useState([]);
+  const [ordenTrabajoCatalog, setOrdenTrabajoCatalog] = useState([]);
   const [ramosLoading, setRamosLoading] = useState(false);
   const [subramosLoading, setSubramosLoading] = useState(false);
   const [vendedoresLoading, setVendedoresLoading] = useState(false);
   const [aseguradosLoading, setAseguradosLoading] = useState(false);
   const [groupsLoading, setGroupsLoading] = useState(false);
+  const [ordenesTrabajoLoading, setOrdenesTrabajoLoading] = useState(false);
   const [readingDocument, setReadingDocument] = useState(false);
-  const [dependentOrderModal, setDependentOrderModal] = useState({
-    open: false,
-    mode: 'create',
-    draft: createDependentOrder(),
-    errors: {}
-  });
 
   const {
     groupModal,
@@ -1520,6 +1094,7 @@ function App() {
   const ramoOptions = ramoCatalog;
   const subramoOptions = subramoCatalog;
   const vendorOptions = vendedorCatalog;
+  const ordenTrabajoOptions = ordenTrabajoCatalog;
   const normalizedRamoOptions = useMemo(
     () => (ramoOptions || []).map(getComboOption).filter((option) => option.label || option.value),
     [ramoOptions]
@@ -1576,74 +1151,6 @@ function App() {
     [groupModal.name, groupCatalog]
   );
   const canCreateGroup = Boolean(normalizeText(groupModal.name)) && groupMatches.length === 0;
-
-  function openDependentOrderModal(order = null) {
-    const draft = order
-      ? { ...order }
-      : createDependentOrder({ asegurado: capture.asegurado, ramo: capture.ramo, subramo: capture.subramo });
-    setDependentOrderModal({
-      open: true,
-      mode: order ? 'edit' : 'create',
-      draft,
-      errors: {}
-    });
-  }
-
-  function closeDependentOrderModal() {
-    setDependentOrderModal({
-      open: false,
-      mode: 'create',
-      draft: createDependentOrder(),
-      errors: {}
-    });
-  }
-
-  function updateDependentOrderDraft(patch) {
-    setDependentOrderModal((current) => ({
-      ...current,
-      draft: { ...current.draft, ...patch }
-    }));
-  }
-
-  function saveDependentOrderModal() {
-    const { draft } = dependentOrderModal;
-    // The rule comes from the OT's OWN ramo catalogue. While it is still loading
-    // or failed we cannot prove the ramo has no subramos, so the requirement
-    // stays on (fail closed) instead of silently turning optional.
-    const otRequiresSubramo =
-      otSubramosLoading || Boolean(otSubramosError) || otSubramoCatalog.length > 0;
-    const validation = validateDependentOrder(draft, otSubramoCatalog, {
-      requireSubramo: otRequiresSubramo
-    });
-
-    if (!validation.valid) {
-      setDependentOrderModal((current) => ({ ...current, errors: validation.errors }));
-      return;
-    }
-
-    setCapture((current) => {
-      const order = {
-        ...draft,
-        asegurado: current.asegurado
-      };
-      if (dependentOrderModal.mode === 'create') {
-        return { ...current, dependentOrders: addDependentOrder(current.dependentOrders, order) };
-      }
-      return {
-        ...current,
-        dependentOrders: updateDependentOrder(current.dependentOrders, draft.id, order)
-      };
-    });
-
-    closeDependentOrderModal();
-  }
-
-  function deleteDependentOrder(id) {
-    setCapture((current) => ({
-      ...current,
-      dependentOrders: removeDependentOrder(current.dependentOrders, id)
-    }));
-  }
 
   async function handleLogin(event) {
     event.preventDefault();
@@ -1713,41 +1220,58 @@ function App() {
     setVendedorCatalog([]);
     setAseguradoCatalog([]);
     setGroupCatalog([]);
+    setOrdenTrabajoCatalog([]);
     setRamosLoading(true);
     setSubramosLoading(false);
     setVendedoresLoading(true);
     setAseguradosLoading(false);
     setGroupsLoading(false);
-    Promise.allSettled([loadRamos(), loadVendedores(executive)]).then(([ramosResult, vendorsResult]) => {
-      if (!mounted) return;
+    setOrdenesTrabajoLoading(true);
+    Promise.allSettled([loadRamos(), loadVendedores(executive), loadOrdenesTrabajo()]).then(
+      ([ramosResult, vendorsResult, ordenesTrabajoResult]) => {
+        if (!mounted) return;
 
-      if (ramosResult.status === 'fulfilled' && ramosResult.value?.ramos) {
-        setRamoCatalog(ramosResult.value.ramos);
-      } else {
-        setRamoCatalog([]);
-        if (ramosResult.status === 'rejected') {
-          openErrorModal('Error al cargar ramos', ramosResult.reason?.message || 'No se pudieron cargar los ramos');
+        if (ramosResult.status === 'fulfilled' && ramosResult.value?.ramos) {
+          setRamoCatalog(ramosResult.value.ramos);
+        } else {
+          setRamoCatalog([]);
+          if (ramosResult.status === 'rejected') {
+            openErrorModal('Error al cargar ramos', ramosResult.reason?.message || 'No se pudieron cargar los ramos');
+          }
         }
-      }
 
-      if (vendorsResult.status === 'fulfilled') {
-        setVendedorCatalog(vendorsResult.value || []);
-      } else {
-        setVendedorCatalog([]);
-        if (vendorsResult.status === 'rejected') {
-          openErrorModal(
-            'Error al cargar vendedores',
-            vendorsResult.reason?.message || 'No se pudieron cargar los vendedores'
-          );
+        if (vendorsResult.status === 'fulfilled') {
+          setVendedorCatalog(vendorsResult.value || []);
+        } else {
+          setVendedorCatalog([]);
+          if (vendorsResult.status === 'rejected') {
+            openErrorModal(
+              'Error al cargar vendedores',
+              vendorsResult.reason?.message || 'No se pudieron cargar los vendedores'
+            );
+          }
         }
-      }
 
-      setLoading(false);
-      setRamosLoading(false);
-      setSubramosLoading(false);
-      setVendedoresLoading(false);
-      setGroupsLoading(false);
-    });
+        if (ordenesTrabajoResult.status === 'fulfilled' && ordenesTrabajoResult.value?.ordenesTrabajo) {
+          setOrdenTrabajoCatalog(ordenesTrabajoResult.value.ordenesTrabajo);
+        } else {
+          setOrdenTrabajoCatalog([]);
+          if (ordenesTrabajoResult.status === 'rejected') {
+            openErrorModal(
+              'Error al cargar órdenes de trabajo',
+              ordenesTrabajoResult.reason?.message || 'No se pudieron cargar las órdenes de trabajo'
+            );
+          }
+        }
+
+        setLoading(false);
+        setRamosLoading(false);
+        setSubramosLoading(false);
+        setVendedoresLoading(false);
+        setGroupsLoading(false);
+        setOrdenesTrabajoLoading(false);
+      }
+    );
     return () => {
       mounted = false;
     };
@@ -1811,56 +1335,6 @@ function App() {
       mounted = false;
     };
   }, [capture.ramo, selectedRamoLabel]);
-
-  // The OT modal loads the subramo catalogue for the OT's OWN ramo (draft.ramo),
-  // mirroring the capture flow above: the ramo value is resolved to the id the
-  // API expects with the same String(...).trim() lookup, and the in-flight load
-  // is invalidated the moment the user changes the ramo again, so a late
-  // response can never populate the catalogue for a ramo that is no longer
-  // selected. Closing the modal resets the whole state.
-  useEffect(() => {
-    if (!dependentOrderModal.open) {
-      setOtSubramoCatalog([]);
-      setOtSubramosLoading(false);
-      setOtSubramosError('');
-      return undefined;
-    }
-
-    const ramoId = String(dependentOrderModal.draft.ramo || '').trim();
-    if (!ramoId) {
-      setOtSubramoCatalog([]);
-      setOtSubramosLoading(false);
-      setOtSubramosError('');
-      return undefined;
-    }
-
-    let mounted = true;
-    setOtSubramoCatalog([]);
-    setOtSubramosError('');
-    setOtSubramosLoading(true);
-    loadSubramos(ramoId)
-      .then((payload) => {
-        if (!mounted) return;
-        if (payload?.subramos) {
-          setOtSubramoCatalog(payload.subramos);
-        } else {
-          setOtSubramoCatalog([]);
-        }
-      })
-      .catch((subramoError) => {
-        if (!mounted) return;
-        setOtSubramoCatalog([]);
-        setOtSubramosError(subramoError.message || 'No se pudieron cargar los subramos');
-      })
-      .finally(() => {
-        if (!mounted) return;
-        setOtSubramosLoading(false);
-      });
-
-    return () => {
-      mounted = false;
-    };
-  }, [dependentOrderModal.open, dependentOrderModal.draft.ramo]);
 
   useEffect(() => {
     if (capture.assignmentMode === 'generic') {
@@ -2452,158 +1926,6 @@ function App() {
       </form>
     </Modal>
   );
-  const dependentOrderModalNode = dependentOrderModal.open ? (
-    <Modal
-      open={dependentOrderModal.open}
-      title={dependentOrderModal.mode === 'create' ? 'Agregar OT dependiente' : 'Editar OT dependiente'}
-      tone="neutral"
-      titleId="dependent-order-modal-title"
-      onClose={closeDependentOrderModal}
-      actions={
-        <>
-          <button type="button" className="ghost-button" onClick={closeDependentOrderModal}>
-            Cancelar
-          </button>
-          <button
-            type="button"
-            className="primary-button"
-            onClick={saveDependentOrderModal}
-          >
-            {dependentOrderModal.mode === 'create' ? 'Agregar' : 'Guardar'}
-          </button>
-        </>
-      }
-    >
-      <form
-        id="dependent-order-modal-form"
-        className="dependent-order-modal-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          saveDependentOrderModal();
-        }}
-      >
-        <div className="mini-field">
-          <label htmlFor="dependent-order-folio">
-            Folio <span className="required-mark">*</span>
-          </label>
-          <input
-            id="dependent-order-folio"
-            type="text"
-            value={dependentOrderModal.draft.folio}
-            onChange={(event) => updateDependentOrderDraft({ folio: event.target.value })}
-            aria-describedby={dependentOrderModal.errors.folio ? 'dependent-order-folio-error' : undefined}
-          />
-          {dependentOrderModal.errors.folio ? (
-            <span id="dependent-order-folio-error" className="field-error">
-              {dependentOrderModal.errors.folio}
-            </span>
-          ) : null}
-        </div>
-        <div className="mini-field">
-          <label htmlFor="dependent-order-concepto">
-            Concepto <span className="required-mark">*</span>
-          </label>
-          <input
-            id="dependent-order-concepto"
-            type="text"
-            value={dependentOrderModal.draft.concepto}
-            onChange={(event) => updateDependentOrderDraft({ concepto: event.target.value })}
-            aria-describedby={dependentOrderModal.errors.concepto ? 'dependent-order-concepto-error' : undefined}
-          />
-          {dependentOrderModal.errors.concepto ? (
-            <span id="dependent-order-concepto-error" className="field-error">
-              {dependentOrderModal.errors.concepto}
-            </span>
-          ) : null}
-        </div>
-        <div className="mini-field">
-          <label htmlFor="dependent-order-asegurado">Asegurado</label>
-          <input
-            id="dependent-order-asegurado"
-            type="text"
-            value={dependentOrderModal.draft.asegurado}
-            readOnly
-          />
-        </div>
-        <ComboField
-          label="Ramo *"
-          value={dependentOrderModal.draft.ramo}
-          options={ramoOptions}
-          placeholder="Selecciona el ramo"
-          disabled={ramosLoading || !ramoOptions.length}
-          onSelect={(value) => updateDependentOrderDraft({ ramo: value, subramo: '' })}
-        />
-        {dependentOrderModal.draft.ramo ? (
-          otSubramosLoading ? (
-            <>
-              <ComboField
-                label="Subramo"
-                value={dependentOrderModal.draft.subramo}
-                options={[]}
-                placeholder="Cargando subramos..."
-                disabled
-              />
-              {dependentOrderModal.errors.subramo ? (
-                <span id="dependent-order-subramo-error" className="field-error">
-                  {dependentOrderModal.errors.subramo}
-                </span>
-              ) : null}
-            </>
-          ) : otSubramosError ? (
-            <>
-              <span id="dependent-order-subramo-error" className="field-error">
-                No se pudieron cargar los subramos de este ramo.
-              </span>
-              {dependentOrderModal.errors.subramo ? (
-                <span className="field-error">{dependentOrderModal.errors.subramo}</span>
-              ) : null}
-            </>
-          ) : otSubramoCatalog.length ? (
-            <>
-              <ComboField
-                label="Subramo *"
-                value={dependentOrderModal.draft.subramo}
-                options={otSubramoCatalog}
-                placeholder="Selecciona el subramo"
-                onSelect={(value) => updateDependentOrderDraft({ subramo: value })}
-              />
-              {dependentOrderModal.errors.subramo ? (
-                <span id="dependent-order-subramo-error" className="field-error">
-                  {dependentOrderModal.errors.subramo}
-                </span>
-              ) : null}
-            </>
-          ) : (
-            <p className="field-hint">Este ramo no tiene subramos.</p>
-          )
-        ) : null}
-        <DatePicker
-          id="dependent-order-start-date"
-          label="Inicio de vigencia *"
-          value={dependentOrderModal.draft.startDate}
-          onChange={(iso) => updateDependentOrderDraft({ startDate: iso })}
-          ariaDescribedBy={dependentOrderModal.errors.startDate ? 'dependent-order-start-error' : undefined}
-        />
-        {dependentOrderModal.errors.startDate ? (
-          <span id="dependent-order-start-error" className="field-error">
-            {dependentOrderModal.errors.startDate}
-          </span>
-        ) : null}
-        <DatePicker
-          id="dependent-order-end-date"
-          label="Fin de vigencia *"
-          value={dependentOrderModal.draft.endDate}
-          onChange={(iso) => updateDependentOrderDraft({ endDate: iso })}
-          ariaDescribedBy={dependentOrderModal.errors.endDate ? 'dependent-order-end-error' : undefined}
-        />
-        {dependentOrderModal.errors.endDate ? (
-          <span id="dependent-order-end-error" className="field-error">
-            {dependentOrderModal.errors.endDate}
-          </span>
-        ) : null}
-      </form>
-    </Modal>
-  ) : null;
   const errorModalNode = errorModal ? (
     <Modal
       open={Boolean(errorModal)}
@@ -2629,7 +1951,6 @@ function App() {
     return (
       <>
         {groupModalNode}
-        {dependentOrderModalNode}
         {errorModalNode}
         <div className="login-screen">
           <div className="login-card">
@@ -2665,7 +1986,6 @@ function App() {
     return (
       <>
         {groupModalNode}
-        {dependentOrderModalNode}
         {errorModalNode}
         <div className="app-shell loading">
           <div className="hero-card">
@@ -2681,7 +2001,6 @@ function App() {
   return (
     <>
       {groupModalNode}
-      {dependentOrderModalNode}
       {errorModalNode}
       <div className={`app-shell ${captureLocked ? 'blocked' : ''}`}>
       <header className="topbar">
@@ -2890,57 +2209,27 @@ function App() {
                   }
                 />
               ) : null}
+              <ComboField
+                label="Orden de trabajo"
+                value={capture.ordenTrabajo}
+                options={ordenTrabajoOptions}
+                placeholder={ordenesTrabajoLoading ? 'Cargando órdenes de trabajo...' : 'Selecciona la orden de trabajo'}
+                hint={
+                  ordenesTrabajoLoading
+                    ? 'Cargando órdenes de trabajo...'
+                    : ordenTrabajoOptions.length
+                      ? `${ordenTrabajoOptions.length} opciones`
+                      : 'Esperando API'
+                }
+                disabled={ordenesTrabajoLoading}
+                onSelect={(value) =>
+                  setCapture((current) =>
+                    applyAssignmentSelection(current, 'ordenTrabajo', value, {}, POLIZA_LAYOUT_FIELDS.length)
+                  )
+                }
+              />
             </div>
-
-            <div className="dependent-order-entry">
-              <button
-                type="button"
-                className="inline-action"
-                onClick={() => openDependentOrderModal()}
-                disabled={!capture.asegurado || !capture.ramo}
-              >
-                Agregar OT dependiente
-              </button>
-              {!capture.asegurado || !capture.ramo ? (
-                <small className="inline-action-hint">Selecciona asegurado y ramo para agregar una OT</small>
-              ) : null}
-            </div>
-
           </Card>
-
-          {capture.dependentOrders.length > 0 ? (
-            <Card title="OTs dependientes" subtitle="Órdenes de trabajo de esta póliza" headAlign="left">
-              <div className="dependent-order-list">
-                {capture.dependentOrders.map((order) => (
-                  <div className="dependent-order-row" key={order.id}>
-                    <div className="dependent-order-meta">
-                      <strong>{order.folio}</strong>
-                      <span>{order.concepto}</span>
-                      <span>
-                        {formatDateInput(order.startDate)} - {formatDateInput(order.endDate)}
-                      </span>
-                    </div>
-                    <div className="dependent-order-actions">
-                      <button
-                        type="button"
-                        className="ghost-button"
-                        onClick={() => openDependentOrderModal(order)}
-                      >
-                        Editar
-                      </button>
-                      <button
-                        type="button"
-                        className="ghost-button danger"
-                        onClick={() => deleteDependentOrder(order.id)}
-                      >
-                        Eliminar
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </Card>
-          ) : null}
 
           {showDocumentsBlock ? (
             <Card
@@ -2996,7 +2285,7 @@ function App() {
                   onClick={readCaptureDocument}
                   disabled={!polizaFiles.length || readingDocument}
                 >
-                  {readingDocument ? 'Leyendo...' : 'Leer póliza'}
+                  {readingDocument ? 'Leyendo...' : 'Leer documentos'}
                 </button>
                 <div className="capture-highlight">
                   <div className={captureMatchClass}>{matchResult.message}</div>
